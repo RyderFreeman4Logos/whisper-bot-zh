@@ -16,6 +16,10 @@
 - 7d8466c **Syntax**: Corrected `IndentationError` in `src/services/asr.py` and `src/bot/handlers.py` that occurred during the regex cleaning implementation. Applied consistent formatting to all files.
 
 ### Changed
+- 73334ef **Core Upgrade**: Switched ASR backend from `FunASR/SenseVoice` to `faster-whisper` to support `large-v2` model within 7GB VRAM constraints.
+    - Removed `funasr`, `modelscope`, `torch` dependencies.
+    - Added `faster-whisper`.
+    - Updated `src/services/asr.py` to use `WhisperModel` with `float16` quantization.
 - 6ccb9f4 **Refactor**: Migrated entire bot framework from `python-telegram-bot` to `aiogram` v3 to resolve persistent connection timeouts (IPv6/HTTPX issues).
     - Replaced `Handlers` with `Router` architecture.
     - Implemented `AuthMiddleware` for cleaner request interception.
