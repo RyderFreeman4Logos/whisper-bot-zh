@@ -14,6 +14,9 @@
     - `WHISPER_INITIAL_PROMPT` (default: "以下是一段简体中文内容:") to guide the model for better context and Traditional/Simplified Chinese handling.
     - `WHISPER_VAD_FILTER` (default: `True`) to reduce hallucinations during silence.
     - Changed default `WHISPER_COMPUTE_TYPE` to `int8` for optimized performance on 7GB VRAM target.
+- 5703d4f **LLM Post-processing**: Integrated `litellm` to provide optional AI-powered text refinement (correction, punctuation, paragraphing).
+    - Supported multi-provider configuration (Gemini, Anthropic, Groq, xAI, Zenmux).
+    - Implemented two-stage reply flow: first raw transcription, then refined text.
 
 ### Fixed
 - **ASR**: Added automatic model downloading from ModelScope if the local model directory is missing or empty.

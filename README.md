@@ -1,15 +1,15 @@
 # SenseVoice Telegram Bot
 
-一个基于 [FunAudioLLM/SenseVoice](https://github.com/FunAudioLLM/SenseVoice) 的 Telegram 语音转文字机器人。
-支持 **CUDA 硬件加速**，专为中文语音识别优化，具备私有化部署和权限控制功能。
+一个基于 [faster-whisper](https://github.com/SYSTRAN/faster-whisper) 的 Telegram 语音转文字机器人。
+支持 **CUDA 硬件加速**，专为中文语音识别优化，具备私有化部署、权限控制及 **LLM 智能润色**功能。
 
 ## ✨ 特性 (Features)
 
--   🎤 **高精度中文识别**: 使用阿里 SenseVoiceSmall 模型，识别准确率高，速度快。
--   🚀 **GPU 加速**: 自动检测并使用 NVIDIA CUDA 进行推理。
+-   🎤 **高精度中文识别**: 使用 OpenAI Whisper `large-v2` 模型 (Int8 量化)，在 7GB 显存下提供顶级的识别效果。
+-   ✨ **LLM 智能润色**: 集成多种大模型 (Gemini, Claude, Groq 等) 自动纠正错别字、添加标点、优化排版。
+-   🚀 **GPU 加速**: 基于 CTranslate2 推理引擎，速度比原版 Whisper 快 4 倍。
 -   🔒 **权限控制**: 内置密码认证机制，只有验证通过的用户才能使用 Bot。
--   📝 **流畅体验**: 语音消息自动排队处理，处理进度实时更新 (Reply 方式回复)。
--   📂 **多格式支持**: 支持 Telegram 语音消息及普通音频文件。
+-   📝 **流畅体验**: 语音消息自动排队处理，实时反馈处理进度。
 
 ## 🛠️ 安装与部署 (Installation)
 
@@ -21,7 +21,7 @@
 
 ### 2. 安装依赖
 
-推荐使用 `uv` 进行包管理（比 pip 快且稳）：
+推荐使用 `uv` 进行包管理：
 
 ```bash
 # 安装 uv (如果未安装)
@@ -44,47 +44,69 @@ cp .env.example .env
 nano .env
 ```
 
-`.env` 文件说明：
+#### 基础配置
 
 ```ini
-BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxyz # 从 @BotFather 获取
-ACCESS_PASSWORD=MyStrongPassword123         # 设置一个强密码，用户需用此认证
-SENSEVOICE_MODEL_PATH=models/sensevoice     # 模型下载路径
-MAX_CONCURRENT_TASKS=1                      # 并发处理任务数 (显存小建议设为 1)
+BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxyz
+ACCESS_PASSWORD=MyStrongPassword123
+WHISPER_MODEL_SIZE=large-v2    # 推荐 large-v2 或 large-v3
+WHISPER_COMPUTE_TYPE=int8      # 7GB 显存以下推荐 int8，大显存可用 float16
+MAX_CONCURRENT_TASKS=1
 LOG_LEVEL=INFO
+```
+
+#### 🧠 智能润色配置 (LLM)
+
+Bot 支持调用 LLM 对识别结果进行二次修正（纠错、标点、分段）。支持所有兼容 OpenAI 格式或 LiteLLM 支持的模型。
+
+**推荐模型配置:**
+
+| 厂商 | 推荐模型 ID (`LLM_MODEL`) | 优势 | 环境变量 Key |
+| :--- | :--- | :--- | :--- |
+| **Google** | `gemini/gemini-2.0-flash-exp` | **首选推荐**。速度极快，中文理解能力强，免费额度高。 | `GEMINI_API` |
+| **Groq** | `groq/llama-3.3-70b-versatile` | 速度最快，几乎无延迟，适合追求极致响应速度的场景。 | `GROQ_API` |
+| **Anthropic** | `anthropic/claude-3-5-haiku-20241022` | 指令遵循能力极强，润色风格自然。 | `ANTHROPIC_API` |
+| **DeepSeek** | `deepseek/deepseek-chat` | 中文语境理解最深，且价格极低。 | `OPENAI_API_KEY` (设BaseURL) |
+
+**配置示例 (.env):**
+
+```ini
+# 启用 LLM 润色 (以 Gemini 为例)
+LLM_MODEL=gemini/gemini-2.0-flash-exp
+GEMINI_API=your_google_api_key_here
+
+# 可选：自定义润色提示词
+LLM_SYSTEM_PROMPT="你是一个中文编辑，请修正错别字并添加标点，保持原意。"
 ```
 
 ### 4. 运行
 
 ```bash
-# 首次运行会自动下载 SenseVoice 模型 (约 500MB+)
-uv run python src/main.py
+# 首次运行会自动下载 Whisper 模型 (约 3GB)
+uv run python -m src.main
 ```
 
 ## 📖 使用指南 (User Guide)
 
 1.  在 Telegram 中找到你的 Bot 并点击 Start。
 2.  发送 `/auth <你的密码>` 进行认证（仅需一次）。
-    -   例如: `/auth MyStrongPassword123`
-3.  认证成功后，直接发送语音消息或音频文件，Bot 会自动回复转写结果。
+3.  直接发送语音消息或音频文件。
+4.  Bot 会首先回复 **原始识别结果**。
+5.  几秒后，Bot 会回复 **AI 润色后的文本** (如果配置了 LLM)。
 
 ## ⚙️ 部署为系统服务 (Systemd)
-
-在 Linux 上，建议配置为 Systemd 服务以实现开机自启。
 
 创建文件 `/etc/systemd/system/whisper-bot.service`:
 
 ```ini
 [Unit]
-Description=Whisper SenseVoice Bot
+Description=Whisper Bot Service
 After=network.target
 
 [Service]
-# 修改为你的用户名和项目路径
 User=your_user
 WorkingDirectory=/path/to/whisper-bot-zh
-# 确保使用的是 uv 创建的 venv 中的 python
-ExecStart=/path/to/whisper-bot-zh/.venv/bin/python src/main.py
+ExecStart=/path/to/whisper-bot-zh/.venv/bin/python -m src.main
 Restart=always
 RestartSec=10
 EnvironmentFile=/path/to/whisper-bot-zh/.env
@@ -93,21 +115,9 @@ EnvironmentFile=/path/to/whisper-bot-zh/.env
 WantedBy=multi-user.target
 ```
 
-启用并启动服务：
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable whisper-bot
-sudo systemctl start whisper-bot
-sudo systemctl status whisper-bot
-```
-
 ## 🧪 开发与测试
 
-本项目采用测试驱动开发 (TDD)。
-
 ```bash
-# 运行测试
 uv run pytest
 ```
 
