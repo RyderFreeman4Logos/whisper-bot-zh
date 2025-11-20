@@ -1,6 +1,7 @@
 import os
+import time
 import structlog
-from typing import Optional
+from typing import Optional, Tuple
 from litellm import acompletion
 
 from whisper_bot.config import Settings
@@ -32,14 +33,15 @@ class LLMService:
         if value:
             os.environ[target_env] = value
 
-    async def refine_text(self, text: str) -> str:
+    async def refine_text(self, text: str) -> Tuple[str, float]:
         """
         Refine the transcribed text using the configured LLM chain.
-        Iterates through models until one succeeds.
+        Returns: (refined_text, duration_in_seconds)
         """
         if not self.models:
-            return text
+            return text, 0.0
 
+        start_time = time.time()
         last_error = None
 
         for model in self.models:
@@ -56,24 +58,20 @@ class LLMService:
                 )
                 
                 refined_content = response.choices[0].message.content
-                # Append model name metadata here? 
-                # The handler expects just text, but we want to know WHICH model succeeded.
-                # We can return a tuple or just the text. 
-                # The handler uses `llm_service.model` to print metadata. 
-                # We should update state or return info.
-                # Let's store the successful model to be accessed by handler.
                 self._last_successful_model = model 
                 
-                logger.info(f"LLM refinement completed using {model}.")
-                return refined_content
+                duration = time.time() - start_time
+                logger.info(f"LLM refinement completed using {model} in {duration:.2f}s.")
+                return refined_content, duration
 
             except Exception as e:
                 logger.warning(f"LLM refinement failed with {model}: {e}. Trying next model...")
                 last_error = e
                 continue
         
+        duration = time.time() - start_time
         logger.error("All LLM models failed.")
-        return f"(LLM处理失败: 所有模型均不可用。最后错误: {str(last_error)})"
+        return f"(LLM处理失败: 所有模型均不可用。最后错误: {str(last_error)})", duration
 
     @property
     def is_enabled(self) -> bool:

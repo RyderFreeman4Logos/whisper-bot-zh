@@ -105,9 +105,13 @@ async def voice_message_handler(
         # 5. LLM Refinement
         if llm_service.is_enabled:
             refining_msg = await processing_msg.reply("✨ 正在进行智能润色...")
-            refined_text = await llm_service.refine_text(text)
+            refined_text, llm_duration = await llm_service.refine_text(text)
             
-            llm_footer = f"✨ 由模型 {llm_service.model} 修正错别字并添加段落和标点"
+            llm_duration_str = _format_duration(llm_duration)
+            llm_footer = (
+                f"✨ 由模型 {llm_service.model} 修正错别字并添加段落和标点 "
+                f"(耗时: {llm_duration_str})"
+            )
             await refining_msg.edit_text(
                 f"```\n{refined_text}\n```\n\n{llm_footer}", 
                 parse_mode="Markdown"
