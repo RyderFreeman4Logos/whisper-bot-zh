@@ -3,11 +3,11 @@ import asyncio
 from unittest.mock import MagicMock, patch
 from pathlib import Path
 
-from src.services.asr import WhisperEngine
+from whisper_bot.services.asr import WhisperEngine
 
 @pytest.fixture
 def mock_model():
-    with patch("src.services.asr.WhisperModel") as MockClass:
+    with patch("whisper_bot.services.asr.WhisperModel") as MockClass:
         mock_instance = MockClass.return_value
         Segment = MagicMock()
         Segment.text = "测试结果"

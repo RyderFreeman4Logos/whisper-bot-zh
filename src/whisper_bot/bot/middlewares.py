@@ -1,7 +1,7 @@
 from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
 from aiogram.types import Message
-from src.services.auth import AuthService
+from whisper_bot.services.auth import AuthService
 
 
 class AuthMiddleware(BaseMiddleware):

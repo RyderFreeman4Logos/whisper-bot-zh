@@ -42,8 +42,8 @@ def _ensure_cuda_libs_in_ld_path():
             # Ensure PYTHONPATH includes CWD so re-exec works even if called as script
             current_cwd = os.getcwd()
             current_pythonpath = os.environ.get("PYTHONPATH", "")
-            # Only add CWD if running with -m src.main pattern, otherwise installation usually handles path
-            if "src.main" in sys.argv[0]: 
+            # Only add CWD if running with -m whisper_bot.main pattern, otherwise installation usually handles path
+            if "whisper_bot.main" in sys.argv[0]: 
                 new_pythonpath = f"{current_cwd}:{current_pythonpath}" if current_pythonpath else current_cwd
                 os.environ["PYTHONPATH"] = new_pythonpath
             
@@ -69,12 +69,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 import structlog
 
-from src.config import get_settings, reset_settings
-from src.services.auth import AuthService
-from src.services.asr import WhisperEngine
-from src.services.llm import LLMService
-from src.bot.handlers import router
-from src.bot.middlewares import AuthMiddleware
+from whisper_bot.config import get_settings, reset_settings
+from whisper_bot.services.auth import AuthService
+from whisper_bot.services.asr import WhisperEngine
+from whisper_bot.services.llm import LLMService
+from whisper_bot.bot.handlers import router
+from whisper_bot.bot.middlewares import AuthMiddleware
 
 # Configure logging
 logging.basicConfig(

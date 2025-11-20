@@ -3,9 +3,9 @@ from unittest.mock import AsyncMock, MagicMock, patch, ANY
 from aiogram.types import Message, User, Chat
 from aiogram.filters.command import CommandObject
 
-from src.bot.handlers import auth_command, voice_message_handler
-from src.services.auth import AuthService
-from src.services.asr import WhisperEngine
+from whisper_bot.bot.handlers import auth_command, voice_message_handler
+from whisper_bot.services.auth import AuthService
+from whisper_bot.services.asr import WhisperEngine
 
 @pytest.fixture
 def mock_message():
@@ -71,7 +71,7 @@ async def test_voice_handler_success(mock_message, mock_asr_engine, tmp_path):
     mock_message.reply.return_value = processing_msg
     
     # Run handler
-    with patch("src.bot.handlers.convert_to_wav", return_value=tmp_path / "voice.wav") as mock_convert:
+    with patch("whisper_bot.bot.handlers.convert_to_wav", return_value=tmp_path / "voice.wav") as mock_convert:
         # Patch time to avoid issues? Not strictly needed if we just check inclusion string
         await voice_message_handler(mock_message, mock_bot, mock_asr_engine, mock_llm_service)
         

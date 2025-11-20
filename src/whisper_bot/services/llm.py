@@ -3,7 +3,7 @@ import structlog
 from typing import Optional
 from litellm import acompletion
 
-from src.config import Settings
+from whisper_bot.config import Settings
 
 logger = structlog.get_logger(__name__)
 

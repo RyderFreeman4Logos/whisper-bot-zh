@@ -1,7 +1,7 @@
 import pytest
 import json
 from pathlib import Path
-from src.services.auth import AuthService
+from whisper_bot.services.auth import AuthService
 
 
 @pytest.fixture

@@ -8,11 +8,11 @@ from aiogram.types import Message
 from aiogram.filters.command import CommandObject
 import structlog
 
-from src.utils import convert_to_wav
-from src.config import get_settings
-from src.services.auth import AuthService
-from src.services.asr import WhisperEngine
-from src.services.llm import LLMService
+from whisper_bot.utils import convert_to_wav
+from whisper_bot.config import get_settings
+from whisper_bot.services.auth import AuthService
+from whisper_bot.services.asr import WhisperEngine
+from whisper_bot.services.llm import LLMService
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()

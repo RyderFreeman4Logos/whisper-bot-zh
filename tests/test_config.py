@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from src.config import Settings
+from whisper_bot.config import Settings
 
 def test_settings_defaults():
     """Test that settings have expected default values where applicable."""

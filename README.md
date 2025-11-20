@@ -88,7 +88,7 @@
 4.  **运行**:
     ```bash
     # 首次运行会自动下载 Whisper 模型 (约 3GB)
-    uv run python -m src.main
+    uv run python -m whisper_bot.main
     ```
 
 ## ⚙️ 配置详解 (Configuration)

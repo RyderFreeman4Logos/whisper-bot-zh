@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 from unittest.mock import patch
-from src.utils import convert_to_wav
+from whisper_bot.utils import convert_to_wav
 
 
 def test_convert_to_wav(tmp_path):
