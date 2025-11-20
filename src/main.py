@@ -1,14 +1,16 @@
 import logging
 import sys
-from pathlib import Path
+import asyncio
 
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 import structlog
 
 from src.config import get_settings
 from src.services.auth import AuthService
 from src.services.asr import SenseVoiceEngine
-from src.bot.handlers import start_command, auth_command, voice_message_handler
+from src.bot.handlers import router
+from src.bot.middlewares import AuthMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -17,15 +19,13 @@ logging.basicConfig(
 )
 logger = structlog.get_logger(__name__)
 
-def main():
+async def main():
     settings = get_settings()
     
     # Set log level
     logging.getLogger().setLevel(settings.LOG_LEVEL)
 
-    logger.info("Starting Whisper Bot (SenseVoice)...")
-    logger.info(f"Model Path: {settings.SENSEVOICE_MODEL_PATH}")
-    logger.info(f"Max Concurrent Tasks: {settings.MAX_CONCURRENT_TASKS}")
+    logger.info("Starting Whisper Bot (SenseVoice) with Aiogram...")
 
     # 1. Initialize Services
     try:
@@ -42,24 +42,36 @@ def main():
         logger.critical(f"Failed to initialize services: {e}")
         sys.exit(1)
 
-    # 2. Build Application
-    application = ApplicationBuilder().token(settings.BOT_TOKEN).build()
+    # 2. Initialize Bot with Proxy Support
+    session = None
+    if settings.PROXY_URL:
+        session = AiohttpSession(proxy=settings.PROXY_URL)
+        logger.info(f"Using proxy: {settings.PROXY_URL}")
 
-    # 3. Inject Dependencies
-    application.bot_data["auth_service"] = auth_service
-    application.bot_data["asr_engine"] = asr_engine
+    bot = Bot(token=settings.BOT_TOKEN, session=session)
 
-    # 4. Register Handlers
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("auth", auth_command))
+    # 3. Initialize Dispatcher
+    dp = Dispatcher()
     
-    # Voice and Audio files
-    voice_filter = filters.VOICE | filters.AUDIO
-    application.add_handler(MessageHandler(voice_filter, voice_message_handler))
+    # 4. Register Middlewares
+    # Register on router or dispatcher. 
+    # Use message middleware to intercept messages.
+    dp.message.middleware(AuthMiddleware(auth_service))
 
-    # 5. Run
+    # 5. Register Routers
+    dp.include_router(router)
+
+    # 6. Run Polling
+    # Pass services as kwargs to be injected into handlers
     logger.info("Bot is polling...")
-    application.run_polling()
+    await dp.start_polling(
+        bot, 
+        auth_service=auth_service, 
+        asr_engine=asr_engine
+    )
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot stopped!")

@@ -77,28 +77,28 @@ class SenseVoiceEngine:
                 logger.error(f"Transcription failed for {file_path.name}: {e}")
                 raise
 
+import re
+
+    def _clean_text(self, text: str) -> str:
+        """Remove SenseVoice special tokens like <|zh|>, <|NEUTRAL|>, etc."""
+        return re.sub(r"<\|.*?\|>", "", text).strip()
+
     def _run_inference(self, file_path_str: str) -> str:
         """
         Blocking inference method.
         """
-        # cache={} is often used in funasr examples to keep state, 
-        # but for SenseVoice we usually just pass input.
-        # language="zh" is default, but we explicitly set it if needed.
-        # use_itn=False (Inverse Text Normalization) - keeping raw or normalized?
-        # Usually we want text.
-        
         res = self.model.generate(
             input=file_path_str,
             cache={},
-            language="zh",  # Force Chinese for now as per req, or "auto"
+            language="zh", 
             use_itn=True,
             batch_size_s=60,
             merge_vad=True,  
             merge_length_s=15,
         )
         
-        # SenseVoice return format:
-        # [{'key': '...', 'text': 'result text'}]
+        text = ""
         if isinstance(res, list) and len(res) > 0:
-            return res[0].get("text", "")
-        return ""
+            text = res[0].get("text", "")
+        
+        return self._clean_text(text)

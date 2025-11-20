@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     SENSEVOICE_MODEL_PATH: Path = Path("models/sensevoice")
     MAX_CONCURRENT_TASKS: int = 1
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    PROXY_URL: Optional[str] = None
     
     # Derived paths (not set by env directly usually, but good to have)
     ALLOWED_USERS_FILE: Path = Path("data/allowed_users.json")
