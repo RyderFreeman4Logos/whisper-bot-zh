@@ -56,3 +56,4 @@
     - afbf762 Updated `.env.example` template to include all new configuration options (Whisper settings, LLM fallback chain, API keys).
     - b2aeadc Updated `README.md` with a disclaimer about AI generation and added a comprehensive "Quick Install (CLI)" guide using `uv tool install`.
     - 0bf97d5 Added technical note to `README.md` detailing the research-backed rationale for selecting `large-v2` and `int8` quantization for Chinese ASR.
+    - ac63300 **Performance**: Replaced disk-based temporary file handling with a full in-memory pipeline. Audio is now downloaded to RAM and piped through FFmpeg to Whisper, avoiding disk writes completely.
