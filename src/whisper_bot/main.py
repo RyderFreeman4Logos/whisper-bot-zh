@@ -5,6 +5,7 @@ import os
 import argparse
 from pathlib import Path
 from typing import List, Optional
+from pydantic import ValidationError
 
 # --- Patch 1: Force IPv4 ---
 # Monkeypatch socket.getaddrinfo to force IPv4
@@ -48,7 +49,6 @@ def _ensure_cuda_libs_in_ld_path():
                 os.environ["PYTHONPATH"] = new_pythonpath
             
             print(f"Updating LD_LIBRARY_PATH with NVIDIA libs and restarting...")
-            print(f"Restarting command: {sys.argv}")
             # Use execvp to search PATH for the executable (handles 'whisper-bot-zh' command)
             # sys.argv[0] is the program name.
             try:
@@ -83,16 +83,60 @@ logging.basicConfig(
 )
 logger = structlog.get_logger(__name__)
 
-async def async_main(env_file: Optional[str] = None):
+def resolve_env_file(cli_env_file: Optional[str]) -> Optional[Path]:
+    """
+    Resolve configuration file in priority order:
+    1. CLI argument (--env-file)
+    2. Current working directory (.env)
+    3. Default config directory (~/.config/whisper-bot-zh/.env)
+    """
+    if cli_env_file:
+        path = Path(cli_env_file)
+        if not path.exists():
+             logger.warning(f"Specified config file not found: {path}")
+        return path
+    
+    cwd_env = Path.cwd() / ".env"
+    if cwd_env.exists():
+        return cwd_env
+        
+    default_env = Path.home() / ".config" / "whisper-bot-zh" / ".env"
+    if default_env.exists():
+        return default_env
+        
+    return None
+
+async def async_main(cli_env_file: Optional[str] = None):
     # Reset settings to ensure fresh load with potential env overrides
     reset_settings()
-    settings = get_settings(env_file=env_file)
+    
+    env_file_path = resolve_env_file(cli_env_file)
+    
+    try:
+        # Convert Path to str if not None, otherwise Pydantic handles None (searches CWD .env or env vars)
+        env_path_str = str(env_file_path) if env_file_path else None
+        settings = get_settings(env_file=env_path_str)
+    except ValidationError as e:
+        print("\n" + "="*60)
+        print("❌ Configuration Error: Missing required settings")
+        print("="*60)
+        print("Please ensure you have configured 'BOT_TOKEN' and 'ACCESS_PASSWORD'.")
+        print("You can do this via:")
+        print("  1. An .env file in the current directory")
+        print("  2. An .env file in ~/.config/whisper-bot-zh/.env")
+        print("  3. Environment variables")
+        print("\nExample setup:")
+        print("  mkdir -p ~/.config/whisper-bot-zh")
+        print("  curl -o ~/.config/whisper-bot-zh/.env https://raw.githubusercontent.com/your-repo/whisper-bot-zh/main/.env.example")
+        print("  nano ~/.config/whisper-bot-zh/.env")
+        print("="*60 + "\n")
+        sys.exit(1)
     
     # Set log level
     logging.getLogger().setLevel(settings.LOG_LEVEL)
 
     logger.info(f"Starting Whisper Bot...")
-    logger.info(f"Config File: {env_file or 'Default (.env or env vars)'}")
+    logger.info(f"Config File: {env_file_path or 'Env Vars / Default'}")
     logger.info(f"Model Dir: {settings.MODEL_DIR}")
     logger.info(f"Data Dir: {settings.DATA_DIR}")
 
@@ -160,9 +204,10 @@ def main_cli():
         os.environ["DATA_DIR"] = str(Path(args.data_dir).resolve())
 
     try:
-        asyncio.run(async_main(env_file=args.env_file))
+        asyncio.run(async_main(cli_env_file=args.env_file))
     except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped!")
+        pass # logger.info("Bot stopped!") is not needed as SystemExit can be silent or handled above
+
 
 if __name__ == "__main__":
     main_cli()
