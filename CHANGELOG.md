@@ -13,6 +13,7 @@
 
 ### Fixed
 - **ASR**: Added automatic model downloading from ModelScope if the local model directory is missing or empty.
+- 7d8466c **Syntax**: Corrected `IndentationError` in `src/services/asr.py` and `src/bot/handlers.py` that occurred during the regex cleaning implementation. Applied consistent formatting to all files.
 
 ### Changed
 - 6ccb9f4 **Refactor**: Migrated entire bot framework from `python-telegram-bot` to `aiogram` v3 to resolve persistent connection timeouts (IPv6/HTTPX issues).
