@@ -34,7 +34,7 @@ async def test_auth_command_success(mock_message, mock_auth_service):
     await auth_command(mock_message, command, mock_auth_service)
     
     mock_auth_service.authenticate_user.assert_called_with(12345, "correct_password")
-    mock_message.answer.assert_called_with("✅ 认证成功！您现在可以使用语音转文字服务了。")
+    mock_message.answer.assert_called_with("✅ 认证成功！您现在可以使用语音转文字服务了。", parse_mode="Markdown")
 
 @pytest.mark.asyncio
 async def test_auth_command_fail(mock_message, mock_auth_service):
@@ -43,7 +43,7 @@ async def test_auth_command_fail(mock_message, mock_auth_service):
     
     await auth_command(mock_message, command, mock_auth_service)
     
-    mock_message.answer.assert_called_with("❌ 认证失败，密码错误。")
+    mock_message.answer.assert_called_with("❌ 认证失败，密码错误。", parse_mode="Markdown")
 
 @pytest.mark.asyncio
 async def test_voice_handler_success(mock_message, mock_asr_engine, tmp_path):
@@ -55,6 +55,9 @@ async def test_voice_handler_success(mock_message, mock_asr_engine, tmp_path):
     mock_bot.download_file = AsyncMock()
     
     mock_asr_engine.transcribe = AsyncMock(return_value="转写文本")
+    mock_asr_engine.model_size = "large-v2"
+    mock_asr_engine.compute_type = "int8"
+    
     mock_llm_service = MagicMock()
     mock_llm_service.is_enabled = False # Disable LLM for basic test
     
@@ -83,9 +86,10 @@ async def test_voice_handler_success(mock_message, mock_asr_engine, tmp_path):
         calls = processing_msg.edit_text.call_args_list
         assert len(calls) >= 1
         
-        # The last call should contain the result + duration
+        # The last call should contain the result + footer
         args, kwargs = calls[-1]
         text_sent = args[0]
         assert "```\n转写文本\n```" in text_sent
-        assert "⏱️ 耗时:" in text_sent
+        assert "🎙️ 由 Whisper 模型" in text_sent
+        assert "耗时:" in text_sent
         assert kwargs['parse_mode'] == "Markdown"
