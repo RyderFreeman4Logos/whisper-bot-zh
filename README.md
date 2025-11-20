@@ -59,25 +59,31 @@ LOG_LEVEL=INFO
 
 Bot 支持调用 LLM 对识别结果进行二次修正（纠错、标点、分段）。支持所有兼容 OpenAI 格式或 LiteLLM 支持的模型。
 
-**推荐模型配置:**
-
-| 厂商 | 推荐模型 ID (`LLM_MODEL`) | 优势 | 环境变量 Key |
-| :--- | :--- | :--- | :--- |
-| **Google** | `gemini/gemini-2.0-flash-exp` | **首选推荐**。速度极快，中文理解能力强，免费额度高。 | `GEMINI_API` |
-| **Groq** | `groq/llama-3.3-70b-versatile` | 速度最快，几乎无延迟，适合追求极致响应速度的场景。 | `GROQ_API` |
-| **Anthropic** | `anthropic/claude-3-5-haiku-20241022` | 指令遵循能力极强，润色风格自然。 | `ANTHROPIC_API` |
-| **DeepSeek** | `deepseek/deepseek-chat` | 中文语境理解最深，且价格极低。 | `OPENAI_API_KEY` (设BaseURL) |
+**多模型故障转移 (Model Fallback):**
+为了应对免费 API (如 Groq) 的 Rate Limit (429) 问题，您可以配置多个模型（用逗号分隔）。Bot 会按顺序尝试，如果前一个模型失败，自动切换到下一个。
 
 **配置示例 (.env):**
 
 ```ini
-# 启用 LLM 润色 (以 Gemini 为例)
-LLM_MODEL=gemini/gemini-2.0-flash-exp
-GEMINI_API=your_google_api_key_here
+# 推荐配置：Groq 70B 主力 -> Groq 8B 备选 -> Gemini Flash 保底
+LLM_MODEL=groq/llama-3.3-70b-versatile,groq/llama-3.1-8b-instant,gemini/gemini-2.0-flash-exp
+
+# 配置对应的 API Key
+GROQ_API=your_groq_api_key
+GEMINI_API=your_google_api_key
 
 # 可选：自定义润色提示词
 LLM_SYSTEM_PROMPT="你是一个中文编辑，请修正错别字并添加标点，保持原意。"
 ```
+
+**推荐模型配置:**
+
+| 厂商 | 推荐模型 ID (`LLM_MODEL`) | 优势 | 环境变量 Key |
+| :--- | :--- | :--- | :--- |
+| **Google** | `gemini/gemini-2.0-flash-exp` | **最佳保底**。免费额度极高，中文强。 | `GEMINI_API` |
+| **Groq** | `groq/llama-3.3-70b-versatile` | **最佳主力**。速度极快，质量高，但有 TPM 限制。 | `GROQ_API` |
+| **Anthropic** | `anthropic/claude-3-5-haiku-20241022` | 指令遵循能力极强，润色风格自然。 | `ANTHROPIC_API` |
+| **DeepSeek** | `deepseek/deepseek-chat` | 中文语境理解最深，且价格极低。 | `OPENAI_API_KEY` (设BaseURL) |
 
 ### 4. 运行
 
