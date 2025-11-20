@@ -49,3 +49,4 @@
     - 98454c8 Refined bot reply footers for clarity:
         - ASR: `🎙️ 由 Whisper 模型 (large-v2) 以 int8 精度转录，耗时: 00:00:02.50`
         - LLM: `✨ 由模型 gemini-2.0-flash-exp 修正错别字并添加段落和标点`
+    - afbf762 Updated `.env.example` template to include all new configuration options (Whisper settings, LLM fallback chain, API keys).
