@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.env
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.sqlite
+*.db
+
+# Project specific
+data/
+models/
+logs/
+temp/
+test-results/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+GEMINI.md
+*.zh.md
