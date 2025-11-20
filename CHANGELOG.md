@@ -23,6 +23,10 @@
 - 1c03335 **Resilience**: Implemented multi-model fallback strategy for LLM service.
     - `LLM_MODEL` now accepts a comma-separated list (e.g., `groq/llama-3.3-70b,groq/llama-3.1-8b,gemini/flash`).
     - Automatically switches to the next model in the chain upon failure or Rate Limit (429), ensuring service continuity.
+- 32f0c89 **CLI & Distribution**:
+    - Registered `whisper-bot-zh` as a console script in `pyproject.toml`.
+    - Added CLI arguments: `--env-file`, `--model-dir`, `--data-dir`.
+    - Updated default paths to follow XDG standards: Config in `~/.config/whisper-bot-zh`, Cache/Models in `~/.cache/whisper-bot-zh`.
 
 ### Fixed
 - **ASR**: Added automatic model downloading from ModelScope if the local model directory is missing or empty.
