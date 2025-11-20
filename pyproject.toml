@@ -10,6 +10,8 @@ dependencies = [
     "ffmpeg-python",
     "aiogram>=3.22.0",
     "faster-whisper>=1.2.1",
+    "nvidia-cudnn-cu12>=9.16.0.29",
+    "nvidia-cublas-cu12>=12.9.1.4",
 ]
 
 [tool.uv]
