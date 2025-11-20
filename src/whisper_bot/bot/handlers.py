@@ -15,7 +15,6 @@ from whisper_bot.services.asr import WhisperEngine
 from whisper_bot.services.llm import LLMService
 
 logger = structlog.get_logger(__name__)
-settings = get_settings()
 
 router = Router()
 
@@ -74,6 +73,8 @@ async def voice_message_handler(
         if not ext:
              ext = ".ogg" if message.voice else ".mp3"
             
+        # Retrieve settings lazily to ensure config is loaded
+        settings = get_settings()
         temp_input_path = settings.TEMP_DIR / f"{file_id}{ext}"
         
         await bot.download_file(file_info.file_path, destination=temp_input_path)
