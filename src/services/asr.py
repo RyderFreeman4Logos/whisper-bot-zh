@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import re
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -12,31 +13,31 @@ logger = structlog.get_logger(__name__)
 
 class SenseVoiceEngine:
     def __init__(
-            self, 
-            model_path: Path, 
-            max_concurrent: int = 1,
-            device: Optional[str] = None
-            ):
+        self, 
+        model_path: Path, 
+        max_concurrent: int = 1,
+        device: Optional[str] = None
+    ):
         self.model_path = model_path
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.max_concurrent = max_concurrent
         self._semaphore = asyncio.Semaphore(max_concurrent)
-
+        
         logger.info(f"Initializing SenseVoiceEngine on {self.device}...", model_path=str(model_path))
-
+        
         # Check if model exists locally, if not, download it
         self._ensure_model_exists()
 
         # Suppress funasr noise if possible, or let it log
         try:
             self.model = AutoModel(
-                    model=str(self.model_path),
-                    device=self.device,
-                    disable_update=True,
-                    disable_pbar=True,
-                    # SenseVoice specific settings can be added here
-                    trust_remote_code=True, 
-                    )
+                model=str(self.model_path),
+                device=self.device,
+                disable_update=True,
+                disable_pbar=True,
+                # SenseVoice specific settings can be added here
+                trust_remote_code=True, 
+            )
             logger.info("SenseVoice model loaded successfully.")
         except Exception as e:
             logger.critical(f"Failed to load SenseVoice model: {e}")
@@ -77,8 +78,6 @@ class SenseVoiceEngine:
                 logger.error(f"Transcription failed for {file_path.name}: {e}")
                 raise
 
-import re
-
     def _clean_text(self, text: str) -> str:
         """Remove SenseVoice special tokens like <|zh|>, <|NEUTRAL|>, etc."""
         return re.sub(r"<\|.*?\|>", "", text).strip()
@@ -88,17 +87,17 @@ import re
         Blocking inference method.
         """
         res = self.model.generate(
-                input=file_path_str,
-                cache={},
-                language="zh", 
-                use_itn=True,
-                batch_size_s=60,
-                merge_vad=True,  
-                merge_length_s=15,
-                )
-
+            input=file_path_str,
+            cache={},
+            language="zh", 
+            use_itn=True,
+            batch_size_s=60,
+            merge_vad=True,  
+            merge_length_s=15,
+        )
+        
         text = ""
         if isinstance(res, list) and len(res) > 0:
             text = res[0].get("text", "")
-
+        
         return self._clean_text(text)

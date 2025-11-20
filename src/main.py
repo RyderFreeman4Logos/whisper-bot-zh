@@ -13,15 +13,13 @@ from src.bot.handlers import router
 from src.bot.middlewares import AuthMiddleware
 
 # Configure logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = structlog.get_logger(__name__)
+
 
 async def main():
     settings = get_settings()
-    
+
     # Set log level
     logging.getLogger().setLevel(settings.LOG_LEVEL)
 
@@ -29,14 +27,10 @@ async def main():
 
     # 1. Initialize Services
     try:
-        auth_service = AuthService(
-            storage_file=settings.ALLOWED_USERS_FILE,
-            admin_password=settings.ACCESS_PASSWORD
-        )
-        
+        auth_service = AuthService(storage_file=settings.ALLOWED_USERS_FILE, admin_password=settings.ACCESS_PASSWORD)
+
         asr_engine = SenseVoiceEngine(
-            model_path=settings.SENSEVOICE_MODEL_PATH,
-            max_concurrent=settings.MAX_CONCURRENT_TASKS
+            model_path=settings.SENSEVOICE_MODEL_PATH, max_concurrent=settings.MAX_CONCURRENT_TASKS
         )
     except Exception as e:
         logger.critical(f"Failed to initialize services: {e}")
@@ -52,9 +46,9 @@ async def main():
 
     # 3. Initialize Dispatcher
     dp = Dispatcher()
-    
+
     # 4. Register Middlewares
-    # Register on router or dispatcher. 
+    # Register on router or dispatcher.
     # Use message middleware to intercept messages.
     dp.message.middleware(AuthMiddleware(auth_service))
 
@@ -64,11 +58,8 @@ async def main():
     # 6. Run Polling
     # Pass services as kwargs to be injected into handlers
     logger.info("Bot is polling...")
-    await dp.start_polling(
-        bot, 
-        auth_service=auth_service, 
-        asr_engine=asr_engine
-    )
+    await dp.start_polling(bot, auth_service=auth_service, asr_engine=asr_engine)
+
 
 if __name__ == "__main__":
     try:

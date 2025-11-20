@@ -3,15 +3,13 @@ from aiogram import BaseMiddleware
 from aiogram.types import Message
 from src.services.auth import AuthService
 
+
 class AuthMiddleware(BaseMiddleware):
     def __init__(self, auth_service: AuthService):
         self.auth_service = auth_service
 
     async def __call__(
-        self,
-        handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]],
-        event: Message,
-        data: Dict[str, Any]
+        self, handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]], event: Message, data: Dict[str, Any]
     ) -> Any:
         user = data.get("event_from_user")
         if not user:
