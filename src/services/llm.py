@@ -47,6 +47,7 @@ class LLMService:
                     {"role": "user", "content": text}
                 ],
                 temperature=0.3, # Low temperature for fidelity
+                num_retries=3    # Automatic exponential backoff for RateLimit/Connection errors
             )
             
             refined_content = response.choices[0].message.content
