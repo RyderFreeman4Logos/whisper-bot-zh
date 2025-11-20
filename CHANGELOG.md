@@ -10,6 +10,10 @@
 - **Configuration**: Environment variable management via `pydantic-settings`.
 - **Tests**: Comprehensive unit/integration tests for Config, Auth, ASR (mocked), and Handlers.
 - **Documentation**: Added `README.md` with deployment instructions (Systemd).
+- e7a7f6f **ASR Configuration**: Added support for fine-tuning Whisper inference:
+    - `WHISPER_INITIAL_PROMPT` (default: "以下是一段简体中文内容:") to guide the model for better context and Traditional/Simplified Chinese handling.
+    - `WHISPER_VAD_FILTER` (default: `True`) to reduce hallucinations during silence.
+    - Changed default `WHISPER_COMPUTE_TYPE` to `int8` for optimized performance on 7GB VRAM target.
 
 ### Fixed
 - **ASR**: Added automatic model downloading from ModelScope if the local model directory is missing or empty.
