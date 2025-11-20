@@ -35,6 +35,7 @@
 - 70948c8 **Reliability**: Enabled automatic retries (`num_retries=3`) in LLM service to gracefully handle Rate Limit (429) and transient network errors with exponential backoff.
 - e294422 **Documentation**: Corrected the license information in `README.md` from MIT to Apache 2.0 to match the actual project license.
 - 1ffcd77 **Packaging**: Refactored project structure by moving source code into a proper `src/whisper_bot` package layout. Updated imports and `pyproject.toml` configuration (added `hatchling` build backend) to ensure `uv tool install` and `pip install` work correctly, resolving `ModuleNotFoundError`.
+- a3724c1 **Configuration**: Implemented a robust `.env` file resolution strategy (CLI > CWD > XDG default) and added a user-friendly `ValidationError` message with clear instructions for missing `BOT_TOKEN` or `ACCESS_PASSWORD`.
 
 ### Changed
 - 73334ef **Core Upgrade**: Switched ASR backend from `FunASR/SenseVoice` to `faster-whisper` to support `large-v2` model within 7GB VRAM constraints.
