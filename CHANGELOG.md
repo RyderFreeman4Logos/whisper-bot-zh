@@ -36,6 +36,7 @@
 - e294422 **Documentation**: Corrected the license information in `README.md` from MIT to Apache 2.0 to match the actual project license.
 - 1ffcd77 **Packaging**: Refactored project structure by moving source code into a proper `src/whisper_bot` package layout. Updated imports and `pyproject.toml` configuration (added `hatchling` build backend) to ensure `uv tool install` and `pip install` work correctly, resolving `ModuleNotFoundError`.
 - a3724c1 **Configuration**: Implemented a robust `.env` file resolution strategy (CLI > CWD > XDG default) and added a user-friendly `ValidationError` message with clear instructions for missing `BOT_TOKEN` or `ACCESS_PASSWORD`.
+- 1784f8e **Startup**: Fixed a crash caused by premature settings initialization in `handlers.py`. Settings are now loaded lazily within the request handler, ensuring the configuration file resolution logic in `main.py` executes first.
 
 ### Changed
 - 73334ef **Core Upgrade**: Switched ASR backend from `FunASR/SenseVoice` to `faster-whisper` to support `large-v2` model within 7GB VRAM constraints.
