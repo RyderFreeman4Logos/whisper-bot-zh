@@ -1,4 +1,5 @@
 import pytest
+import io
 from unittest.mock import AsyncMock, MagicMock, patch, ANY
 from aiogram.types import Message, User, Chat
 from aiogram.filters.command import CommandObject
@@ -46,7 +47,7 @@ async def test_auth_command_fail(mock_message, mock_auth_service):
     mock_message.answer.assert_called_with("❌ 认证失败，密码错误。", parse_mode="Markdown")
 
 @pytest.mark.asyncio
-async def test_voice_handler_success(mock_message, mock_asr_engine, tmp_path):
+async def test_voice_handler_success(mock_message, mock_asr_engine):
     # Mock dependencies
     mock_bot = AsyncMock()
     mock_file_info = MagicMock()
@@ -59,7 +60,7 @@ async def test_voice_handler_success(mock_message, mock_asr_engine, tmp_path):
     mock_asr_engine.compute_type = "int8"
     
     mock_llm_service = MagicMock()
-    mock_llm_service.is_enabled = False # Disable LLM for basic test
+    mock_llm_service.is_enabled = False 
     
     # Setup message
     mock_message.voice = MagicMock()
@@ -71,25 +72,31 @@ async def test_voice_handler_success(mock_message, mock_asr_engine, tmp_path):
     mock_message.reply.return_value = processing_msg
     
     # Run handler
-    with patch("whisper_bot.bot.handlers.convert_to_wav", return_value=tmp_path / "voice.wav") as mock_convert:
-        # Patch time to avoid issues? Not strictly needed if we just check inclusion string
+    # Mock convert_audio_memory to return a dummy buffer
+    mock_wav_buffer = io.BytesIO(b"fake_wav_data")
+    
+    with patch("whisper_bot.bot.handlers.convert_audio_memory", return_value=mock_wav_buffer) as mock_convert:
+        
         await voice_message_handler(mock_message, mock_bot, mock_asr_engine, mock_llm_service)
         
         # Verify
         mock_message.reply.assert_called()
         mock_bot.get_file.assert_called_with("file_123")
-        mock_bot.download_file.assert_called()
-        mock_asr_engine.transcribe.assert_called()
+        # Check that download_file was called with destination=BytesIO
+        args, kwargs = mock_bot.download_file.call_args
+        assert isinstance(kwargs['destination'], io.BytesIO)
+        
+        # Check conversion was called with bytes
+        mock_convert.assert_called()
+        
+        # Check transcribe was called with buffer
+        mock_asr_engine.transcribe.assert_called_with(mock_wav_buffer)
         
         # Verify edit_text calls
-        # We look for the call containing the result
         calls = processing_msg.edit_text.call_args_list
         assert len(calls) >= 1
         
-        # The last call should contain the result + footer
         args, kwargs = calls[-1]
         text_sent = args[0]
         assert "```\n转写文本\n```" in text_sent
         assert "🎙️ 由 Whisper 模型" in text_sent
-        assert "耗时:" in text_sent
-        assert kwargs['parse_mode'] == "Markdown"

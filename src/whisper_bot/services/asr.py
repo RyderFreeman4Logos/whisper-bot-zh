@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union, BinaryIO
+import numpy as np
 
 from faster_whisper import WhisperModel
 import structlog
@@ -42,31 +43,33 @@ class WhisperEngine:
             logger.critical(f"Failed to load Whisper model: {e}")
             raise
 
-    async def transcribe(self, file_path: Path) -> str:
+    async def transcribe(self, audio_input: Union[str, Path, BinaryIO, np.ndarray]) -> str:
         """
-        Transcribe an audio file asynchronously.
+        Transcribe audio input asynchronously.
+        audio_input: Path to file, file-like object, or numpy array.
         """
-        if not file_path.exists():
-            raise FileNotFoundError(f"Audio file not found: {file_path}")
-
-        logger.debug(f"Waiting for slot to transcribe {file_path.name}...")
+        logger.debug(f"Waiting for slot to transcribe...")
         async with self._semaphore:
-            logger.info(f"Starting transcription for {file_path.name}")
+            logger.info(f"Starting transcription")
             try:
                 # Run blocking inference in thread
-                text = await asyncio.to_thread(self._run_inference, str(file_path))
-                logger.info(f"Transcription completed for {file_path.name}")
+                text = await asyncio.to_thread(self._run_inference, audio_input)
+                logger.info(f"Transcription completed")
                 return text
             except Exception as e:
-                logger.error(f"Transcription failed for {file_path.name}: {e}")
+                logger.error(f"Transcription failed: {e}")
                 raise
 
-    def _run_inference(self, file_path_str: str) -> str:
+    def _run_inference(self, audio_input: Union[str, Path, BinaryIO, np.ndarray]) -> str:
         """
         Blocking inference method using faster-whisper.
         """
+        # faster-whisper accepts str (path), binaryIO, or np.ndarray
+        if isinstance(audio_input, Path):
+            audio_input = str(audio_input)
+            
         segments, info = self.model.transcribe(
-            file_path_str, 
+            audio_input, 
             beam_size=5,
             language="zh",
             initial_prompt=self.initial_prompt,
@@ -75,4 +78,10 @@ class WhisperEngine:
         
         # Gather all segments
         result_text = "".join([segment.text for segment in segments])
+        
+        # Regular cleanup
+        if isinstance(audio_input, str):
+             # remove special tokens if any? faster-whisper output is usually clean text but might have spaces
+             pass
+             
         return result_text.strip()
