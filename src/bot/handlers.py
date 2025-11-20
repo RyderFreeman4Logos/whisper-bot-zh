@@ -181,15 +181,27 @@ async def voice_message_handler(
 
             
 
-            refining_msg = await processing_msg.reply("✨ 正在进行智能润色...")
+                        refining_msg = await processing_msg.reply("✨ 正在进行智能润色...")
 
-            refined_text = await llm_service.refine_text(text)
+            
 
-            await refining_msg.edit_text(f"{refined_text}")
+                        refined_text = await llm_service.refine_text(text)
 
+            
 
+                        # Also wrap refined text in code block
 
-        # Cleanup
+            
+
+                        await refining_msg.edit_text(f"```\n{refined_text}\n```", parse_mode="Markdown")
+
+            
+
+            
+
+            
+
+                    # Cleanup
 
         try:
 
