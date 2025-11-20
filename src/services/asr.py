@@ -11,24 +11,24 @@ class WhisperEngine:
     def __init__(
         self, 
         model_size: str = "large-v2",
-        compute_type: str = "float16",
+        compute_type: str = "int8",
         max_concurrent: int = 1,
-        device: Optional[str] = None
+        device: Optional[str] = None,
+        initial_prompt: Optional[str] = None,
+        vad_filter: bool = False
     ):
-        # faster-whisper handles device automatically usually, but good to be explicit
-        # If device is not provided, let faster-whisper decide (usually cuda if avail)
-        # faster-whisper's device arg: "cuda" or "cpu" or "auto"
-        self.device = device or "cuda" # We force cuda as per requirement, fallback handled by user or lib if cuda missing? 
-        # actually faster-whisper raises error if cuda requested but not found.
-        # User said "optimize for 7G VRAM", implying GPU availability.
-        
+        self.device = device or "cuda"
         self.model_size = model_size
         self.compute_type = compute_type
         self.max_concurrent = max_concurrent
+        self.initial_prompt = initial_prompt
+        self.vad_filter = vad_filter
+        
         self._semaphore = asyncio.Semaphore(max_concurrent)
         
         logger.info(f"Initializing WhisperEngine (faster-whisper)...")
         logger.info(f"Model: {model_size}, Device: {self.device}, Compute: {compute_type}")
+        logger.info(f"VAD: {vad_filter}, Prompt: {initial_prompt}")
         
         try:
             # Initializing the model downloads it automatically if not present
@@ -65,15 +65,14 @@ class WhisperEngine:
         """
         Blocking inference method using faster-whisper.
         """
-        # beam_size=5 is default.
-        # language="zh" forces Chinese.
         segments, info = self.model.transcribe(
             file_path_str, 
             beam_size=5,
-            language="zh"
+            language="zh",
+            initial_prompt=self.initial_prompt,
+            vad_filter=self.vad_filter
         )
         
         # Gather all segments
-        # segments is a generator, so list() triggers inference
         result_text = "".join([segment.text for segment in segments])
         return result_text.strip()

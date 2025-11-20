@@ -89,7 +89,9 @@ async def main():
         asr_engine = WhisperEngine(
             model_size=settings.WHISPER_MODEL_SIZE,
             compute_type=settings.WHISPER_COMPUTE_TYPE,
-            max_concurrent=settings.MAX_CONCURRENT_TASKS
+            max_concurrent=settings.MAX_CONCURRENT_TASKS,
+            initial_prompt=settings.WHISPER_INITIAL_PROMPT,
+            vad_filter=settings.WHISPER_VAD_FILTER
         )
     except Exception as e:
         logger.critical(f"Failed to initialize services: {e}")

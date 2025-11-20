@@ -12,7 +12,9 @@ class Settings(BaseSettings):
 
     # Optional with defaults
     WHISPER_MODEL_SIZE: str = "large-v2"
-    WHISPER_COMPUTE_TYPE: str = "float16"
+    WHISPER_COMPUTE_TYPE: str = "int8"
+    WHISPER_INITIAL_PROMPT: str = "以下是一段简体中文内容:"
+    WHISPER_VAD_FILTER: bool = True
     MAX_CONCURRENT_TASKS: int = 1
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     PROXY_URL: Optional[str] = None
