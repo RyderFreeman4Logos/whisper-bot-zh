@@ -23,9 +23,16 @@ def test_settings_defaults():
         assert settings.MAX_CONCURRENT_TASKS == 1
         assert settings.LOG_LEVEL == "INFO"
         assert settings.WHISPER_MODEL_SIZE == "large-v2"
-        assert settings.WHISPER_COMPUTE_TYPE == "int8" # Updated default
+        assert settings.WHISPER_COMPUTE_TYPE == "int8" 
         assert settings.WHISPER_VAD_FILTER is True
         assert settings.WHISPER_INITIAL_PROMPT == "以下是一段简体中文内容:"
+        
+        # Verify paths
+        assert settings.DATA_DIR == Path.home() / ".config" / "whisper-bot-zh"
+        assert settings.CACHE_DIR == Path.home() / ".cache" / "whisper-bot-zh"
+        assert settings.ALLOWED_USERS_FILE == settings.DATA_DIR / "allowed_users.json"
+        assert settings.MODEL_DIR == settings.CACHE_DIR / "models"
+        assert settings.TEMP_DIR == settings.CACHE_DIR / "temp"
 
 def test_settings_validation_error():
     """Test that missing required fields raises ValidationError."""
@@ -50,9 +57,21 @@ def test_settings_custom_values():
         mp.setenv("WHISPER_VAD_FILTER", "False")
         mp.setenv("WHISPER_INITIAL_PROMPT", "Custom Prompt")
         
+        # Custom paths
+        mp.setenv("DATA_DIR", "/tmp/config_test")
+        mp.setenv("CACHE_DIR", "/tmp/cache_test")
+        mp.setenv("MODEL_DIR", "/tmp/models_test")
+        
         settings = Settings()
         assert settings.MAX_CONCURRENT_TASKS == 4
         assert settings.WHISPER_MODEL_SIZE == "medium"
         assert settings.WHISPER_COMPUTE_TYPE == "float32"
         assert settings.WHISPER_VAD_FILTER is False
         assert settings.WHISPER_INITIAL_PROMPT == "Custom Prompt"
+        
+        assert settings.DATA_DIR == Path("/tmp/config_test")
+        assert settings.CACHE_DIR == Path("/tmp/cache_test")
+        assert settings.MODEL_DIR == Path("/tmp/models_test")
+        # Derived defaults should follow base
+        assert settings.ALLOWED_USERS_FILE == Path("/tmp/config_test/allowed_users.json")
+

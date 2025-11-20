@@ -15,6 +15,9 @@ dependencies = [
     "litellm>=1.80.0",
 ]
 
+[project.scripts]
+whisper-bot-zh = "src.main:main_cli"
+
 [tool.uv]
 dev-dependencies = [
     "pytest",

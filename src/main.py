@@ -2,8 +2,9 @@ import logging
 import sys
 import socket
 import os
+import argparse
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 # --- Patch 1: Force IPv4 ---
 # Monkeypatch socket.getaddrinfo to force IPv4
@@ -41,15 +42,25 @@ def _ensure_cuda_libs_in_ld_path():
             # Ensure PYTHONPATH includes CWD so re-exec works even if called as script
             current_cwd = os.getcwd()
             current_pythonpath = os.environ.get("PYTHONPATH", "")
-            new_pythonpath = f"{current_cwd}:{current_pythonpath}" if current_pythonpath else current_cwd
-            os.environ["PYTHONPATH"] = new_pythonpath
+            # Only add CWD if running with -m src.main pattern, otherwise installation usually handles path
+            if "src.main" in sys.argv[0]: 
+                new_pythonpath = f"{current_cwd}:{current_pythonpath}" if current_pythonpath else current_cwd
+                os.environ["PYTHONPATH"] = new_pythonpath
             
             print(f"Updating LD_LIBRARY_PATH with NVIDIA libs and restarting...")
-            # Re-execute the script with updated environment
-            os.execv(sys.executable, [sys.executable] + sys.argv)
+            print(f"Restarting command: {sys.argv}")
+            # Use execvp to search PATH for the executable (handles 'whisper-bot-zh' command)
+            # sys.argv[0] is the program name.
+            try:
+                os.execvp(sys.argv[0], sys.argv)
+            except FileNotFoundError:
+                # Fallback for python -m usage where argv[0] might be full path
+                os.execv(sys.executable, [sys.executable] + sys.argv)
             
     except ImportError:
         pass 
+    except Exception as e:
+        print(f"Warning: Failed to patch LD_LIBRARY_PATH: {e}")
 
 _ensure_cuda_libs_in_ld_path()
 
@@ -58,7 +69,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 import structlog
 
-from src.config import get_settings
+from src.config import get_settings, reset_settings
 from src.services.auth import AuthService
 from src.services.asr import WhisperEngine
 from src.services.llm import LLMService
@@ -72,13 +83,18 @@ logging.basicConfig(
 )
 logger = structlog.get_logger(__name__)
 
-async def main():
-    settings = get_settings()
+async def async_main(env_file: Optional[str] = None):
+    # Reset settings to ensure fresh load with potential env overrides
+    reset_settings()
+    settings = get_settings(env_file=env_file)
     
     # Set log level
     logging.getLogger().setLevel(settings.LOG_LEVEL)
 
-    logger.info("Starting Whisper Bot (faster-whisper) with Aiogram...")
+    logger.info(f"Starting Whisper Bot...")
+    logger.info(f"Config File: {env_file or 'Default (.env or env vars)'}")
+    logger.info(f"Model Dir: {settings.MODEL_DIR}")
+    logger.info(f"Data Dir: {settings.DATA_DIR}")
 
     # 1. Initialize Services
     try:
@@ -127,8 +143,26 @@ async def main():
         llm_service=llm_service
     )
 
-if __name__ == "__main__":
+def main_cli():
+    """Entry point for CLI."""
+    parser = argparse.ArgumentParser(description="Whisper Telegram Bot")
+    parser.add_argument("--env-file", help="Path to .env configuration file", default=None)
+    parser.add_argument("--model-dir", help="Directory to store Whisper models", default=None)
+    parser.add_argument("--data-dir", help="Directory for persistent data (users.json)", default=None)
+    
+    # Parse known args to avoid issues if aiogram or other libs try to parse args (unlikely but safe)
+    args, _ = parser.parse_known_args()
+    
+    # Set environment variables for Config to pick up
+    if args.model_dir:
+        os.environ["MODEL_DIR"] = str(Path(args.model_dir).resolve())
+    if args.data_dir:
+        os.environ["DATA_DIR"] = str(Path(args.data_dir).resolve())
+
     try:
-        asyncio.run(main())
+        asyncio.run(async_main(env_file=args.env_file))
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped!")
+
+if __name__ == "__main__":
+    main_cli()
