@@ -15,6 +15,8 @@ from src.services.auth import AuthService
 
 from src.services.asr import WhisperEngine
 
+from src.services.llm import LLMService
+
 
 
 logger = structlog.get_logger(__name__)
@@ -24,6 +26,8 @@ settings = get_settings()
 
 
 router = Router()
+
+# ... (start_command and auth_command remain unchanged) ...
 
 
 
@@ -77,54 +81,130 @@ async def auth_command(message: Message, command: CommandObject, auth_service: A
 
 @router.message(F.voice | F.audio)
 
-async def voice_message_handler(message: Message, bot: Bot, asr_engine: WhisperEngine):
+async def voice_message_handler(
+
+    message: Message, 
+
+    bot: Bot, 
+
+    asr_engine: WhisperEngine, 
+
+    llm_service: LLMService
+
+):
+
     """Handle voice and audio messages."""
+
     # Prefer voice, then audio
+
     attachment = message.voice or message.audio
+
     if not attachment:
+
         return
 
+
+
     # Reply "Processing..."
+
     processing_msg = await message.reply("⏳ 正在接收并处理音频...")
 
+
+
     try:
+
         # 1. Download file
+
         file_id = attachment.file_id
+
         file_info = await bot.get_file(file_id)
+
         
-        # Determine extension
-        # telegram file_path often has extension. 
-        # If not, fallback.
+
         ext = Path(file_info.file_path).suffix if file_info.file_path else ""
+
         if not ext:
+
              ext = ".ogg" if message.voice else ".mp3"
+
             
+
         temp_input_path = settings.TEMP_DIR / f"{file_id}{ext}"
+
         
+
         await bot.download_file(file_info.file_path, destination=temp_input_path)
+
         logger.info(f"Downloaded audio to {temp_input_path}")
 
+
+
         # 2. Convert to wav
+
         wav_path = convert_to_wav(temp_input_path)
 
+
+
         # 3. Transcribe
+
         await processing_msg.edit_text("🔄 正在进行语音识别 (排队中)...")
+
         text = await asr_engine.transcribe(wav_path)
 
-        # 4. Reply result
+
+
+        # 4. Reply raw result
+
         if not text:
-            await processing_msg.edit_text("⚠️ 未能识别出文字。" )
+
+            await processing_msg.edit_text("⚠️ 未能识别出文字。")
+
+            return # Stop if no text
+
         else:
+
             # Use Markdown code block for monospaced font and easy copying
+
             await processing_msg.edit_text(f"```\n{text}\n```", parse_mode="Markdown")
 
+        
+
+        # 5. LLM Refinement (Optional)
+
+        if llm_service.is_enabled:
+
+            # Send a placeholder or typing action?
+
+            # Since we already replied with raw text, we reply to THAT message or original?
+
+            # Requirement: "use llm result to reply to the first text" -> Reply to processing_msg
+
+            
+
+            refining_msg = await processing_msg.reply("✨ 正在进行智能润色...")
+
+            refined_text = await llm_service.refine_text(text)
+
+            await refining_msg.edit_text(f"{refined_text}")
+
+
+
         # Cleanup
+
         try:
+
             if temp_input_path.exists(): temp_input_path.unlink()
+
             if wav_path.exists() and wav_path != temp_input_path: wav_path.unlink()
+
         except Exception as e:
+
             logger.warning(f"Failed to clean up temp files: {e}")
 
+
+
     except Exception as e:
+
         logger.error(f"Error handling voice message: {e}")
+
         await processing_msg.edit_text(f"❌ 处理出错: {str(e)}")

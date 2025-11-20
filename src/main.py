@@ -61,6 +61,7 @@ import structlog
 from src.config import get_settings
 from src.services.auth import AuthService
 from src.services.asr import WhisperEngine
+from src.services.llm import LLMService
 from src.bot.handlers import router
 from src.bot.middlewares import AuthMiddleware
 
@@ -93,6 +94,9 @@ async def main():
             initial_prompt=settings.WHISPER_INITIAL_PROMPT,
             vad_filter=settings.WHISPER_VAD_FILTER
         )
+        
+        llm_service = LLMService(settings)
+        
     except Exception as e:
         logger.critical(f"Failed to initialize services: {e}")
         sys.exit(1)
@@ -116,7 +120,12 @@ async def main():
 
     # 6. Run Polling
     logger.info("Bot is polling...")
-    await dp.start_polling(bot, auth_service=auth_service, asr_engine=asr_engine)
+    await dp.start_polling(
+        bot, 
+        auth_service=auth_service, 
+        asr_engine=asr_engine,
+        llm_service=llm_service
+    )
 
 if __name__ == "__main__":
     try:

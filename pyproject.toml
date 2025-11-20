@@ -12,6 +12,7 @@ dependencies = [
     "faster-whisper>=1.2.1",
     "nvidia-cudnn-cu12>=9.16.0.29",
     "nvidia-cublas-cu12>=12.9.1.4",
+    "litellm>=1.80.0",
 ]
 
 [tool.uv]

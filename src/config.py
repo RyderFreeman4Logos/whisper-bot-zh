@@ -19,6 +19,25 @@ class Settings(BaseSettings):
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     PROXY_URL: Optional[str] = None
     
+    # LLM Settings
+    LLM_MODEL: Optional[str] = None  # e.g. "gemini/gemini-2.5-flash"
+    LLM_SYSTEM_PROMPT: str = (
+        "你是一位精通中文的专业编辑。你的任务是接收一段语音转录的粗糙文本，对其进行润色。"
+        "请执行以下操作：\n"
+        "1. 修正错别字和明显的语音识别错误。\n"
+        "2. 添加正确的标点符号。\n"
+        "3. 根据语义进行合理的分段，使其易于阅读。\n"
+        "4. 保持原意和语气不变，不要删减关键信息。\n"
+        "请直接输出润色后的文本，不要包含任何解释或前缀。"
+    )
+    
+    # LLM API Keys (Mapped from user preference)
+    ANTHROPIC_API: Optional[str] = None
+    GEMINI_API: Optional[str] = None
+    GROQ_API: Optional[str] = None
+    XAI_API: Optional[str] = None
+    ZENMUX_API: Optional[str] = None
+    
     # Derived paths (not set by env directly usually, but good to have)
     ALLOWED_USERS_FILE: Path = Path("data/allowed_users.json")
     TEMP_DIR: Path = Path("temp")
