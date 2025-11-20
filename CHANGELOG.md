@@ -13,3 +13,11 @@
 
 ### Fixed
 - **ASR**: Added automatic model downloading from ModelScope if the local model directory is missing or empty.
+
+### Changed
+- 6ccb9f4 **Refactor**: Migrated entire bot framework from `python-telegram-bot` to `aiogram` v3 to resolve persistent connection timeouts (IPv6/HTTPX issues).
+    - Replaced `Handlers` with `Router` architecture.
+    - Implemented `AuthMiddleware` for cleaner request interception.
+- **UX**: Improved ASR output formatting:
+    - Cleaned special tokens (e.g., `<|zh|>`) from transcription result.
+    - Wrapped output in Markdown code blocks for monospaced font and easy copying.
