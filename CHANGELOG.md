@@ -32,5 +32,6 @@
     - Replaced `Handlers` with `Router` architecture.
     - Implemented `AuthMiddleware` for cleaner request interception.
 - **UX**: Improved ASR output formatting:
+    - a23693e Applied Markdown code block formatting to LLM refined output for consistency and ease of copying.
     - Cleaned special tokens (e.g., `<|zh|>`) from transcription result.
     - Wrapped output in Markdown code blocks for monospaced font and easy copying.
