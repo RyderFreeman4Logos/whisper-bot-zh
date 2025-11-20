@@ -33,6 +33,7 @@
 - 22de607 **Runtime**: Implemented dynamic `LD_LIBRARY_PATH` patching and auto-restart mechanism in `src/main.py`. This allows `faster-whisper` (CTranslate2) to locate `nvidia-cudnn` and `nvidia-cublas` libraries installed in the virtual environment, resolving "Cannot load symbol" errors without requiring system-level CUDA installation.
 - 7d8466c **Syntax**: Corrected `IndentationError` in `src/services/asr.py` and `src/bot/handlers.py` that occurred during the regex cleaning implementation. Applied consistent formatting to all files.
 - 70948c8 **Reliability**: Enabled automatic retries (`num_retries=3`) in LLM service to gracefully handle Rate Limit (429) and transient network errors with exponential backoff.
+- e294422 **Documentation**: Corrected the license information in `README.md` from MIT to Apache 2.0 to match the actual project license.
 
 ### Changed
 - 73334ef **Core Upgrade**: Switched ASR backend from `FunASR/SenseVoice` to `faster-whisper` to support `large-v2` model within 7GB VRAM constraints.
