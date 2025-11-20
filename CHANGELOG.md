@@ -20,6 +20,9 @@
 - be5153f **UX Metadata**: Added execution metadata footer to bot replies:
     - Raw transcription now includes elapsed time (e.g., `⏱️ 耗时: 00:00:02.50`).
     - LLM refined output now includes the model name used (e.g., `🤖 模型: gemini/gemini-2.0-flash-exp`).
+- 1c03335 **Resilience**: Implemented multi-model fallback strategy for LLM service.
+    - `LLM_MODEL` now accepts a comma-separated list (e.g., `groq/llama-3.3-70b,groq/llama-3.1-8b,gemini/flash`).
+    - Automatically switches to the next model in the chain upon failure or Rate Limit (429), ensuring service continuity.
 
 ### Fixed
 - **ASR**: Added automatic model downloading from ModelScope if the local model directory is missing or empty.
