@@ -42,3 +42,6 @@
     - Cleaned special tokens (e.g., `<|zh|>`) from transcription result.
     - Wrapped output in Markdown code blocks for monospaced font and easy copying.
     - a23693e Applied Markdown code block formatting to LLM refined output for consistency and ease of copying.
+    - 98454c8 Refined bot reply footers for clarity:
+        - ASR: `🎙️ 由 Whisper 模型 (large-v2) 以 int8 精度转录，耗时: 00:00:02.50`
+        - LLM: `✨ 由模型 gemini-2.0-flash-exp 修正错别字并添加段落和标点`
