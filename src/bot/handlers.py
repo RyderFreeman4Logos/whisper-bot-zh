@@ -79,129 +79,303 @@ async def auth_command(message: Message, command: CommandObject, auth_service: A
 
 
 
+import os
+
+
+
+import time
+
+
+
+from pathlib import Path
+
+
+
+
+
+
+
+from aiogram import Router, F, Bot
+
+
+
+# ... (imports) ...
+
+
+
+
+
+
+
+def _format_duration(seconds: float) -> str:
+
+
+
+    m, s = divmod(seconds, 60)
+
+
+
+    h, m = divmod(m, 60)
+
+
+
+    return f"{int(h):02d}:{int(m):02d}:{s:05.2f}"
+
+
+
+
+
+
+
 @router.message(F.voice | F.audio)
+
+
 
 async def voice_message_handler(
 
+
+
     message: Message, 
+
+
 
     bot: Bot, 
 
+
+
     asr_engine: WhisperEngine, 
+
+
 
     llm_service: LLMService
 
+
+
 ):
+
+
 
     """Handle voice and audio messages."""
 
+
+
     # Prefer voice, then audio
+
+
 
     attachment = message.voice or message.audio
 
+
+
     if not attachment:
+
+
 
         return
 
 
 
+
+
+
+
     # Reply "Processing..."
+
+
 
     processing_msg = await message.reply("⏳ 正在接收并处理音频...")
 
 
 
+
+
+
+
     try:
+
+
 
         # 1. Download file
 
+
+
         file_id = attachment.file_id
+
+
 
         file_info = await bot.get_file(file_id)
 
+
+
         
+
+
 
         ext = Path(file_info.file_path).suffix if file_info.file_path else ""
 
+
+
         if not ext:
+
+
 
              ext = ".ogg" if message.voice else ".mp3"
 
+
+
             
+
+
 
         temp_input_path = settings.TEMP_DIR / f"{file_id}{ext}"
 
+
+
         
 
+
+
         await bot.download_file(file_info.file_path, destination=temp_input_path)
+
+
 
         logger.info(f"Downloaded audio to {temp_input_path}")
 
 
 
+
+
+
+
         # 2. Convert to wav
+
+
 
         wav_path = convert_to_wav(temp_input_path)
 
 
 
-        # 3. Transcribe
+
+
+
+
+        # 3. Transcribe with timing
+
+
 
         await processing_msg.edit_text("🔄 正在进行语音识别 (排队中)...")
+
+
+
+        
+
+
+
+        start_time = time.time()
+
+
 
         text = await asr_engine.transcribe(wav_path)
 
 
 
+        duration = time.time() - start_time
+
+
+
+
+
+
+
         # 4. Reply raw result
+
+
 
         if not text:
 
+
+
             await processing_msg.edit_text("⚠️ 未能识别出文字。")
 
-            return # Stop if no text
+
+
+            return 
+
+
 
         else:
 
-            # Use Markdown code block for monospaced font and easy copying
 
-            await processing_msg.edit_text(f"```\n{text}\n```", parse_mode="Markdown")
+
+            # Use Markdown code block for text, metadata outside
+
+
+
+            formatted_duration = _format_duration(duration)
+
+
+
+            await processing_msg.edit_text(
+
+
+
+                f"```\n{text}\n```\n\n⏱️ 耗时: {formatted_duration}", 
+
+
+
+                parse_mode="Markdown"
+
+
+
+            )
+
+
 
         
 
-        # 5. LLM Refinement (Optional)
+
+
+        # 5. LLM Refinement
+
+
 
         if llm_service.is_enabled:
 
-            # Send a placeholder or typing action?
 
-            # Since we already replied with raw text, we reply to THAT message or original?
 
-            # Requirement: "use llm result to reply to the first text" -> Reply to processing_msg
+            refining_msg = await processing_msg.reply("✨ 正在进行智能润色...")
 
-            
 
-                        refining_msg = await processing_msg.reply("✨ 正在进行智能润色...")
 
-            
+            refined_text = await llm_service.refine_text(text)
 
-                        refined_text = await llm_service.refine_text(text)
+
 
             
 
-                        # Also wrap refined text in code block
 
-            
 
-                        await refining_msg.edit_text(f"```\n{refined_text}\n```", parse_mode="Markdown")
+            await refining_msg.edit_text(
 
-            
 
-            
 
-            
+                f"```\n{refined_text}\n```\n\n🤖 模型: {llm_service.model}", 
 
-                    # Cleanup
+
+
+                parse_mode="Markdown"
+
+
+
+            )
+
+
+
+
+
+
+
+        # Cleanup
 
         try:
 
