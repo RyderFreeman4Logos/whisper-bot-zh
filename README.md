@@ -144,4 +144,4 @@ WantedBy=multi-user.target
 
 ## License
 
-MIT
+Apache 2.0
