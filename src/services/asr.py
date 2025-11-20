@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 
 import torch
 from funasr import AutoModel
+from modelscope import snapshot_download
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -23,6 +24,9 @@ class SenseVoiceEngine:
         
         logger.info(f"Initializing SenseVoiceEngine on {self.device}...", model_path=str(model_path))
         
+        # Check if model exists locally, if not, download it
+        self._ensure_model_exists()
+
         # Suppress funasr noise if possible, or let it log
         try:
             self.model = AutoModel(
@@ -37,6 +41,21 @@ class SenseVoiceEngine:
         except Exception as e:
             logger.critical(f"Failed to load SenseVoice model: {e}")
             raise
+
+    def _ensure_model_exists(self) -> None:
+        """
+        Check if model directory exists and has content. 
+        If not, download SenseVoiceSmall from ModelScope.
+        """
+        # Simple check: if dir doesn't exist or is empty
+        if not self.model_path.exists() or not any(self.model_path.iterdir()):
+            logger.info(f"Model not found at {self.model_path}. Downloading 'iic/SenseVoiceSmall'...")
+            try:
+                snapshot_download("iic/SenseVoiceSmall", local_dir=str(self.model_path))
+                logger.info("Model downloaded successfully.")
+            except Exception as e:
+                logger.error(f"Failed to download model: {e}")
+                raise
 
     async def transcribe(self, file_path: Path) -> str:
         """

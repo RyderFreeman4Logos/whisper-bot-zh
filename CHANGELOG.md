@@ -10,3 +10,6 @@
 - **Configuration**: Environment variable management via `pydantic-settings`.
 - **Tests**: Comprehensive unit/integration tests for Config, Auth, ASR (mocked), and Handlers.
 - **Documentation**: Added `README.md` with deployment instructions (Systemd).
+
+### Fixed
+- **ASR**: Added automatic model downloading from ModelScope if the local model directory is missing or empty.
