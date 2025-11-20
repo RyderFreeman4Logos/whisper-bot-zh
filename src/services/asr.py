@@ -1,67 +1,50 @@
 import asyncio
-import functools
-import re
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional
 
-import torch
-from funasr import AutoModel
-from modelscope import snapshot_download
+from faster_whisper import WhisperModel
 import structlog
 
 logger = structlog.get_logger(__name__)
 
-class SenseVoiceEngine:
+class WhisperEngine:
     def __init__(
         self, 
-        model_path: Path, 
+        model_size: str = "large-v2",
+        compute_type: str = "float16",
         max_concurrent: int = 1,
         device: Optional[str] = None
     ):
-        self.model_path = model_path
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        # faster-whisper handles device automatically usually, but good to be explicit
+        # If device is not provided, let faster-whisper decide (usually cuda if avail)
+        # faster-whisper's device arg: "cuda" or "cpu" or "auto"
+        self.device = device or "cuda" # We force cuda as per requirement, fallback handled by user or lib if cuda missing? 
+        # actually faster-whisper raises error if cuda requested but not found.
+        # User said "optimize for 7G VRAM", implying GPU availability.
+        
+        self.model_size = model_size
+        self.compute_type = compute_type
         self.max_concurrent = max_concurrent
         self._semaphore = asyncio.Semaphore(max_concurrent)
         
-        logger.info(f"Initializing SenseVoiceEngine on {self.device}...", model_path=str(model_path))
+        logger.info(f"Initializing WhisperEngine (faster-whisper)...")
+        logger.info(f"Model: {model_size}, Device: {self.device}, Compute: {compute_type}")
         
-        # Check if model exists locally, if not, download it
-        self._ensure_model_exists()
-
-        # Suppress funasr noise if possible, or let it log
         try:
-            self.model = AutoModel(
-                model=str(self.model_path),
+            # Initializing the model downloads it automatically if not present
+            self.model = WhisperModel(
+                model_size_or_path=self.model_size,
                 device=self.device,
-                disable_update=True,
-                disable_pbar=True,
-                # SenseVoice specific settings can be added here
-                trust_remote_code=True, 
+                compute_type=self.compute_type
             )
-            logger.info("SenseVoice model loaded successfully.")
+            logger.info("Whisper model loaded successfully.")
         except Exception as e:
-            logger.critical(f"Failed to load SenseVoice model: {e}")
+            logger.critical(f"Failed to load Whisper model: {e}")
             raise
-
-    def _ensure_model_exists(self) -> None:
-        """
-        Check if model directory exists and has content. 
-        If not, download SenseVoiceSmall from ModelScope.
-        """
-        # Simple check: if dir doesn't exist or is empty
-        if not self.model_path.exists() or not any(self.model_path.iterdir()):
-            logger.info(f"Model not found at {self.model_path}. Downloading 'iic/SenseVoiceSmall'...")
-            try:
-                snapshot_download("iic/SenseVoiceSmall", local_dir=str(self.model_path))
-                logger.info("Model downloaded successfully.")
-            except Exception as e:
-                logger.error(f"Failed to download model: {e}")
-                raise
 
     async def transcribe(self, file_path: Path) -> str:
         """
         Transcribe an audio file asynchronously.
-        Processes are limited by a semaphore to prevent OOM.
         """
         if not file_path.exists():
             raise FileNotFoundError(f"Audio file not found: {file_path}")
@@ -70,7 +53,7 @@ class SenseVoiceEngine:
         async with self._semaphore:
             logger.info(f"Starting transcription for {file_path.name}")
             try:
-                # Run the blocking inference in a separate thread
+                # Run blocking inference in thread
                 text = await asyncio.to_thread(self._run_inference, str(file_path))
                 logger.info(f"Transcription completed for {file_path.name}")
                 return text
@@ -78,26 +61,19 @@ class SenseVoiceEngine:
                 logger.error(f"Transcription failed for {file_path.name}: {e}")
                 raise
 
-    def _clean_text(self, text: str) -> str:
-        """Remove SenseVoice special tokens like <|zh|>, <|NEUTRAL|>, etc."""
-        return re.sub(r"<\|.*?\|>", "", text).strip()
-
     def _run_inference(self, file_path_str: str) -> str:
         """
-        Blocking inference method.
+        Blocking inference method using faster-whisper.
         """
-        res = self.model.generate(
-            input=file_path_str,
-            cache={},
-            language="zh", 
-            use_itn=True,
-            batch_size_s=60,
-            merge_vad=True,  
-            merge_length_s=15,
+        # beam_size=5 is default.
+        # language="zh" forces Chinese.
+        segments, info = self.model.transcribe(
+            file_path_str, 
+            beam_size=5,
+            language="zh"
         )
         
-        text = ""
-        if isinstance(res, list) and len(res) > 0:
-            text = res[0].get("text", "")
-        
-        return self._clean_text(text)
+        # Gather all segments
+        # segments is a generator, so list() triggers inference
+        result_text = "".join([segment.text for segment in segments])
+        return result_text.strip()

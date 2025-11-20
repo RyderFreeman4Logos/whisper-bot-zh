@@ -7,33 +7,75 @@ from aiogram.client.session.aiohttp import AiohttpSession
 import structlog
 
 from src.config import get_settings
+
 from src.services.auth import AuthService
-from src.services.asr import SenseVoiceEngine
+
+from src.services.asr import WhisperEngine
+
 from src.bot.handlers import router
+
 from src.bot.middlewares import AuthMiddleware
 
+
+
 # Configure logging
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+
+logging.basicConfig(
+
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+
+    level=logging.INFO
+
+)
+
 logger = structlog.get_logger(__name__)
 
 
+
 async def main():
+
     settings = get_settings()
 
+    
+
     # Set log level
+
     logging.getLogger().setLevel(settings.LOG_LEVEL)
 
-    logger.info("Starting Whisper Bot (SenseVoice) with Aiogram...")
+
+
+    logger.info("Starting Whisper Bot (faster-whisper) with Aiogram...")
+
+
 
     # 1. Initialize Services
-    try:
-        auth_service = AuthService(storage_file=settings.ALLOWED_USERS_FILE, admin_password=settings.ACCESS_PASSWORD)
 
-        asr_engine = SenseVoiceEngine(
-            model_path=settings.SENSEVOICE_MODEL_PATH, max_concurrent=settings.MAX_CONCURRENT_TASKS
+    try:
+
+        auth_service = AuthService(
+
+            storage_file=settings.ALLOWED_USERS_FILE,
+
+            admin_password=settings.ACCESS_PASSWORD
+
         )
+
+        
+
+        asr_engine = WhisperEngine(
+
+            model_size=settings.WHISPER_MODEL_SIZE,
+
+            compute_type=settings.WHISPER_COMPUTE_TYPE,
+
+            max_concurrent=settings.MAX_CONCURRENT_TASKS
+
+        )
+
     except Exception as e:
+
         logger.critical(f"Failed to initialize services: {e}")
+
         sys.exit(1)
 
     # 2. Initialize Bot with Proxy Support

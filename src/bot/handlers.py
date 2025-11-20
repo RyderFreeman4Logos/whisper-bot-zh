@@ -8,41 +8,76 @@ from aiogram.filters.command import CommandObject
 import structlog
 
 from src.utils import convert_to_wav
+
 from src.config import get_settings
+
 from src.services.auth import AuthService
-from src.services.asr import SenseVoiceEngine
+
+from src.services.asr import WhisperEngine
+
+
 
 logger = structlog.get_logger(__name__)
+
 settings = get_settings()
+
+
 
 router = Router()
 
+
+
 @router.message(CommandStart())
+
 async def start_command(message: Message):
+
     """Send a welcome message."""
+
     await message.answer(
-        "👋 欢迎使用 SenseVoice 语音转文字机器人！\n\n" 
+
+        "👋 欢迎使用 Whisper 语音转文字机器人！\n\n"
+
         "请先使用 `/auth <password>` 进行认证，然后发送语音消息即可。",
+
         parse_mode="Markdown"
+
     )
 
+
+
 @router.message(Command("auth"))
+
 async def auth_command(message: Message, command: CommandObject, auth_service: AuthService):
+
     """Handle user authentication."""
+
     if not command.args:
+
         await message.answer("⚠️ 请输入密码，格式：`/auth <password>`", parse_mode="Markdown")
+
         return
 
+
+
     password = command.args
+
     user_id = message.from_user.id
 
+
+
     if auth_service.authenticate_user(user_id, password):
-        await message.answer("✅ 认证成功！您现在可以使用语音转文字服务了。" )
+
+        await message.answer("✅ 认证成功！您现在可以使用语音转文字服务了。")
+
     else:
-        await message.answer("❌ 认证失败，密码错误。" )
+
+        await message.answer("❌ 认证失败，密码错误。")
+
+
 
 @router.message(F.voice | F.audio)
-async def voice_message_handler(message: Message, bot: Bot, asr_engine: SenseVoiceEngine):
+
+async def voice_message_handler(message: Message, bot: Bot, asr_engine: WhisperEngine):
     """Handle voice and audio messages."""
     # Prefer voice, then audio
     attachment = message.voice or message.audio
