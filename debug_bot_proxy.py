@@ -1,6 +1,7 @@
 import asyncio
-import os
 import logging
+import os
+
 from telegram.ext import ApplicationBuilder
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG)
@@ -11,7 +12,7 @@ async def main():
     proxy = None
 
     if os.path.exists(".env"):
-        with open(".env", "r", encoding="utf-8") as f:
+        with open(".env", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line.startswith("BOT_TOKEN="):
