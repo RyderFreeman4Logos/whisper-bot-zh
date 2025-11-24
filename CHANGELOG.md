@@ -58,3 +58,7 @@
     - b2aeadc Updated `README.md` with a disclaimer about AI generation and added a comprehensive "Quick Install (CLI)" guide using `uv tool install`.
     - 0bf97d5 Added technical note to `README.md` detailing the research-backed rationale for selecting `large-v2` and `int8` quantization for Chinese ASR.
     - ac63300 **Performance**: Replaced disk-based temporary file handling with a full in-memory pipeline. Audio is now downloaded to RAM and piped through FFmpeg to Whisper, avoiding disk writes completely.
+aa1f687f6cbe11ae81e3ed89c8ed3906260f3be4
+- Added Telegram-safe long-text handling: raw transcripts and LLM-refined outputs now pass through a size guard that falls back to sending a UTF-8 `.txt` document when Markdown would exceed the ~4k character limit, preventing delivery failures on very long recordings.
+- Introduced `_send_text_with_limit` helper to centralize formatting, footer composition, and document fallback; reused for both ASR and LLM replies to avoid duplicated logic.
+- Expanded handler tests to cover oversized raw and refined messages, ensuring the file-fallback path is exercised; refreshed existing tests after ruff formatting. Note: global `mypy` still fails due to pre-existing untyped helpers and third-party stubs, unchanged in this commit.
