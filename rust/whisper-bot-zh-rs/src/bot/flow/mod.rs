@@ -1,5 +1,12 @@
-//! Voice-message orchestration — splits refinement logic into single-path
-//! and dual-path flows to keep each file small.
+//! Voice-message orchestration helpers for single and dual LLM flows.
+
+use crate::llm::RefinementResult;
 
 pub mod dual;
 pub mod single;
+
+#[derive(Debug, Clone, Default)]
+pub struct DualProgress {
+    pub cloud: Option<RefinementResult>,
+    pub local: Option<RefinementResult>,
+}

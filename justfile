@@ -50,6 +50,7 @@ find-monolith-files:
             *.min.*) return 0 ;;
             */AGENTS.md|*/FACTORY.md) return 0 ;;
             *.md) return 0 ;;
+            *.toml|.env*|LICENSE|.python-version) return 0 ;;
             uv.lock|Cargo.lock|package-lock.json|pnpm-lock.yaml|weave.lock) return 0 ;;
         esac
         [ -f "$file" ] || return 0
