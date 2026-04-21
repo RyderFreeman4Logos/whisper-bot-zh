@@ -1,60 +1,92 @@
-import pytest
-import asyncio
 import io
-from unittest.mock import MagicMock, patch
-from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from whisper_bot.services.asr import WhisperEngine
+import pytest
+
+from whisper_bot.services.asr import AsrClient, AsrConfigError
+
 
 @pytest.fixture
-def mock_model():
-    with patch("whisper_bot.services.asr.WhisperModel") as MockClass:
-        mock_instance = MockClass.return_value
-        Segment = MagicMock()
-        Segment.text = "测试结果"
-        mock_instance.transcribe.return_value = ([Segment], None)
-        yield MockClass
+def mock_openai():
+    with patch("whisper_bot.services.asr.AsyncOpenAI") as MockClient:
+        instance = MockClient.return_value
+        instance.audio = MagicMock()
+        instance.audio.transcriptions = MagicMock()
+        instance.audio.transcriptions.create = AsyncMock(return_value="测试结果")
+        yield MockClient
+
 
 @pytest.mark.asyncio
-async def test_asr_initialization(mock_model):
-    # Default compute_type is int8
-    engine = WhisperEngine(model_size="tiny", device="cpu", max_concurrent=1)
-    mock_model.assert_called_with(model_size_or_path="tiny", device="cpu", compute_type="int8")
-
-@pytest.mark.asyncio
-async def test_transcribe_success(mock_model, tmp_path):
-    engine = WhisperEngine(
-        model_size="tiny", 
-        device="cpu",
-        initial_prompt="Prompt",
-        vad_filter=True
+async def test_asr_initialization_uses_configured_base_url(mock_openai):
+    AsrClient(
+        base_url="https://api.groq.com/openai/v1",
+        api_key="gsk_fake",
+        model="whisper-large-v3",
     )
-    dummy_file = tmp_path / "test.wav"
-    # dummy_file doesn't need to exist on disk now
-    
-    result = await engine.transcribe(dummy_file)
-    assert result == "测试结果"
-    
-    # Verify call args with Path
-    args, kwargs = mock_model.return_value.transcribe.call_args
-    assert args[0] == str(dummy_file)
-    assert kwargs['language'] == "zh"
-    assert kwargs['initial_prompt'] == "Prompt"
-    assert kwargs['vad_filter'] is True
+    mock_openai.assert_called_once_with(
+        base_url="https://api.groq.com/openai/v1",
+        api_key="gsk_fake",
+    )
+
 
 @pytest.mark.asyncio
-async def test_transcribe_bytes_success(mock_model):
-    engine = WhisperEngine(model_size="tiny")
-    dummy_bytes = io.BytesIO(b"wav data")
-    
-    result = await engine.transcribe(dummy_bytes)
-    assert result == "测试结果"
-    
-    # Verify call args with BytesIO
-    args, kwargs = mock_model.return_value.transcribe.call_args
-    assert args[0] == dummy_bytes
+async def test_asr_initialization_falls_back_to_groq_env(monkeypatch, mock_openai):
+    monkeypatch.setenv("GROQ_API_KEY", "env_key")
+    AsrClient(base_url="https://api.groq.com/openai/v1", api_key=None, model="whisper-large-v3")
+    _, kwargs = mock_openai.call_args
+    assert kwargs["api_key"] == "env_key"
+
 
 @pytest.mark.asyncio
-async def test_concurrency_limit(mock_model):
-    engine = WhisperEngine(model_size="tiny", max_concurrent=1)
-    assert engine._semaphore._value == 1
+async def test_asr_initialization_raises_without_key(monkeypatch, mock_openai):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(AsrConfigError):
+        AsrClient(base_url="https://api.groq.com/openai/v1", api_key=None, model="whisper-large-v3")
+
+
+@pytest.mark.asyncio
+async def test_transcribe_passes_config_to_api(mock_openai):
+    client = AsrClient(
+        base_url="https://api.groq.com/openai/v1",
+        api_key="gsk_fake",
+        model="whisper-large-v3",
+        language="zh",
+        prompt="Prompt",
+        temperature=0.0,
+    )
+    audio = io.BytesIO(b"fake_wav_bytes")
+
+    result = await client.transcribe(audio)
+
+    assert result == "测试结果"
+    mock_openai.return_value.audio.transcriptions.create.assert_awaited_once()
+    _, kwargs = mock_openai.return_value.audio.transcriptions.create.call_args
+    assert kwargs["model"] == "whisper-large-v3"
+    assert kwargs["language"] == "zh"
+    assert kwargs["prompt"] == "Prompt"
+    assert kwargs["temperature"] == 0.0
+    assert kwargs["response_format"] == "text"
+    # file=(filename, payload, content_type)
+    filename, payload, content_type = kwargs["file"]
+    assert filename == "audio.wav"
+    assert payload == b"fake_wav_bytes"
+    assert content_type == "audio/wav"
+
+
+@pytest.mark.asyncio
+async def test_transcribe_accepts_raw_bytes(mock_openai):
+    client = AsrClient(base_url="https://api.groq.com/openai/v1", api_key="gsk_fake", model="whisper-large-v3")
+    result = await client.transcribe(b"raw_bytes")
+    assert result == "测试结果"
+
+
+@pytest.mark.asyncio
+async def test_concurrency_limit(mock_openai):
+    client = AsrClient(
+        base_url="https://api.groq.com/openai/v1",
+        api_key="gsk_fake",
+        model="whisper-large-v3",
+        max_concurrent=2,
+    )
+    assert client._semaphore._value == 2

@@ -1,6 +1,7 @@
 import asyncio
-import os
 import logging
+import os
+
 from telegram import Bot
 
 # Set up basic logging to see what's happening under the hood
@@ -12,7 +13,7 @@ async def main():
     token = os.getenv("BOT_TOKEN")
     if not token and os.path.exists(".env"):
         print("Reading .env file manually...")
-        with open(".env", "r", encoding="utf-8") as f:
+        with open(".env", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line.startswith("BOT_TOKEN="):
@@ -32,7 +33,7 @@ async def main():
 
         # Call get_me
         me = await bot.get_me()
-        print(f"✅ SUCCESS! Bot connected.")
+        print("✅ SUCCESS! Bot connected.")
         print(f"ID: {me.id}")
         print(f"Username: @{me.username}")
         print(f"Full Name: {me.first_name}")

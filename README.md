@@ -1,131 +1,121 @@
-# SenseVoice Telegram Bot
+# Whisper Telegram Bot (zh)
 
 > ⚠️ **免责声明 / Disclaimer**
-> 
-> 本项目代码完全由 **Gemini 3 Pro Preview** 模型在用户的 Prompt 指导下自动生成。作者仅提供了设计思路与提示词。
-> 
-> 虽然作者认为本项目风险极低（即使出问题也不太可能造成实质损失），但**使用者需自行承担所有运行风险**。我们非常欢迎社区开发者提交 PR 或 Issue 进行代码审查 (Review) 与改进，共同完善这个项目。
+>
+> 本项目代码由 LLM（Gemini 3 Pro Preview / Claude Opus 4.7）在作者指导下生成。
+> 作者提供设计思路与提示词。虽然风险极低，**使用者需自行承担所有运行风险**。
+> 欢迎社区提交 PR / Issue。
 
-一个基于 [faster-whisper](https://github.com/SYSTRAN/faster-whisper) 的 Telegram 语音转文字机器人。
-支持 **CUDA 硬件加速**，专为中文语音识别优化，具备私有化部署、权限控制及 **LLM 智能润色**功能。
+通过任意 **OpenAI 兼容的 Whisper 服务**（默认 [Groq Whisper large-v3](https://console.groq.com/docs/speech-text)）把 Telegram 语音消息转成中文文字的机器人，支持 LLM 自动纠错 / 标点 / 分段。
 
-## ✨ 特性 (Features)
+## ✨ 特性
 
--   🎤 **高精度中文识别**: 使用 OpenAI Whisper `large-v2` 模型 (Int8 量化)，在 7GB 显存下提供顶级的识别效果。
-    > **关于模型选择**: 根据 Gemini 3 Pro 的研究报告，`large-v2` 在中文识别任务上的表现优于 `large-v3` 和 `turbo` 版本（错字率更低）。同时，`int8` 量化对识别质量的影响微乎其微，但能显著提升推理速度并大幅降低显存占用（<3GB VRAM）。当然，本项目架构灵活，我们也热烈欢迎社区贡献更多技术路线或模型对比数据。
--   ✨ **LLM 智能润色**: 集成多种大模型 (Gemini, Claude, Groq 等) 自动纠正错别字、添加标点、优化排版。
--   🚀 **GPU 加速**: 基于 CTranslate2 推理引擎，速度比原版 Whisper 快 4 倍。
--   🔒 **权限控制**: 内置密码认证机制，只有验证通过的用户才能使用 Bot。
--   📝 **流畅体验**: 语音消息自动排队处理，实时反馈处理进度。
--   🛠️ **开箱即用**: 支持作为 CLI 工具直接安装，无需复杂的环境配置。
+-   🎤 **零 GPU 部署**：默认调用 Groq 托管的 Whisper large-v3，**不需要本地显卡 / CUDA / 模型下载**。
+-   🔌 **后端可切换**：改 3 个 env (`ASR_BASE_URL` / `ASR_API_KEY` / `ASR_MODEL`) 即可指向任何 OpenAI 兼容端点（自建 whisper.cpp server、vLLM-whisper、其他云厂商等）。
+-   ✨ **LLM 智能润色**：集成 `litellm`，支持 Groq / Gemini / Anthropic 等多厂商 fallback 链，自动纠错、加标点、分段。system prompt 严格禁止"尾巴幻觉"（LLM 擅自追加建议/补充）。
+-   🔒 **密码认证**：`/auth <password>` 认证后用户 ID 落盘，重启依然有效。
+-   📝 **流畅体验**：语音消息排队处理，实时反馈进度；超长文本自动转成 `.txt` 文件发送。
 
-## 🛠️ 安装与部署 (Installation)
+## 🛠️ 安装与部署
 
-### 方法一：快速安装 (CLI 工具) 🚀
+### 方法一：CLI 工具（推荐）
 
-最简单的使用方式，适合普通用户。
+```bash
+pip install uv
+uv tool install git+https://github.com/RyderFreeman4Logos/whisper-bot-zh.git
+```
 
-1.  **安装 uv**:
-    ```bash
-    pip install uv
-    ```
+准备配置：
+```bash
+mkdir -p ~/.config/whisper-bot-zh
+curl -o ~/.config/whisper-bot-zh/.env \
+  https://raw.githubusercontent.com/RyderFreeman4Logos/whisper-bot-zh/main/.env.example
+nano ~/.config/whisper-bot-zh/.env  # 填入 BOT_TOKEN / ACCESS_PASSWORD / GROQ_API_KEY
+```
 
-2.  **安装 Bot**:
-    ```bash
-    # 直接从 GitHub 安装到系统隔离环境
-    uv tool install git+https://github.com/your-repo/whisper-bot-zh.git
-    ```
+运行：
+```bash
+whisper-bot-zh
+```
 
-3.  **准备配置**:
-    默认配置文件路径为 `~/.config/whisper-bot-zh/`。
-    
-    ```bash
-    mkdir -p ~/.config/whisper-bot-zh
-    # 下载示例配置 (请替换为实际的 .env.example 链接或手动创建)
-    curl -o ~/.config/whisper-bot-zh/.env https://raw.githubusercontent.com/your-repo/whisper-bot-zh/main/.env.example
-    nano ~/.config/whisper-bot-zh/.env
-    ```
+默认目录：
+- 配置：`~/.config/whisper-bot-zh/`
+- 缓存：`~/.cache/whisper-bot-zh/`
 
-4.  **运行**:
-    ```bash
-    whisper-bot-zh
-    ```
-    
-    *默认数据目录:*
-    *   配置: `~/.config/whisper-bot-zh`
-    *   模型/缓存: `~/.cache/whisper-bot-zh`
+自定义路径：
+```bash
+whisper-bot-zh --env-file /opt/bot/.env --data-dir /mnt/data/bot
+```
 
-    *自定义路径运行:*
-    ```bash
-    whisper-bot-zh --env-file /opt/bot/.env --model-dir /mnt/data/models
-    ```
+### 方法二：源码开发
 
----
+```bash
+git clone https://github.com/RyderFreeman4Logos/whisper-bot-zh.git
+cd whisper-bot-zh
+uv sync
+cp .env.example .env
+nano .env
+uv run python -m whisper_bot.main
+```
 
-### 方法二：源码部署 (开发者) 🛠️
+要求：Python 3.10+、FFmpeg 已装在 PATH。
 
-适合需要二次开发或调试的用户。
+上面这组 `cp .env.example .env` / `uv run python -m whisper_bot.main` 是 Python 源码开发流程。
+Rust CLI / `cargo run` 不会默认读取项目根目录 `.env`；Rust 运行时只会读取
+`~/.config/whisper-bot-zh/.env`，或显式传入 `--env-file /path/to/.env`。
 
-1.  **环境要求**:
-    -   Linux / macOS / Windows
-    -   Python 3.10+
-    -   FFmpeg (必须安装并配置到 PATH)
-    -   (可选) NVIDIA GPU + CUDA Toolkit
+## ⚙️ 配置
 
-2.  **安装依赖**:
-    ```bash
-    git clone https://github.com/your-repo/whisper-bot-zh.git
-    cd whisper-bot-zh
-    uv sync
-    ```
-
-3.  **配置**:
-    ```bash
-    cp .env.example .env
-    nano .env
-    ```
-
-4.  **运行**:
-    ```bash
-    # 首次运行会自动下载 Whisper 模型 (约 3GB)
-    uv run python -m whisper_bot.main
-    ```
-
-## ⚙️ 配置详解 (Configuration)
-
-### 基础配置 (.env)
+### 基础
 
 ```ini
 BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrSTUvwxyz
 ACCESS_PASSWORD=MyStrongPassword123
-WHISPER_MODEL_SIZE=large-v2    # 推荐 large-v2 或 large-v3
-WHISPER_COMPUTE_TYPE=int8      # 7GB 显存以下推荐 int8，大显存可用 float16
 ```
 
-### 🧠 智能润色配置 (LLM)
-
-Bot 支持调用 LLM 对识别结果进行二次修正（纠错、标点、分段）。
-
-**多模型故障转移 (Model Fallback):**
-为了应对免费 API (如 Groq) 的 Rate Limit (429) 问题，您可以配置多个模型（用逗号分隔）。Bot 会按顺序尝试，如果前一个模型失败，自动切换到下一个。
+### ASR 端点（默认 Groq）
 
 ```ini
-# 推荐配置：Groq 70B 主力 -> Groq 8B 备选 -> Gemini Flash 保底
-LLM_MODEL=groq/llama-3.3-70b-versatile,groq/llama-3.1-8b-instant,gemini/gemini-2.0-flash-exp
-
-# 配置对应的 API Key
-GROQ_API=your_groq_api_key
-GEMINI_API=your_google_api_key
+ASR_BASE_URL=https://api.groq.com/openai/v1
+ASR_API_KEY=gsk_...          # 可留空，回落到 GROQ_API_KEY / OPENAI_API_KEY
+ASR_MODEL=whisper-large-v3
+ASR_LANGUAGE=zh
+ASR_PROMPT=以下是一段简体中文内容:
+ASR_TEMPERATURE=0.0
 ```
 
-| 厂商 | 推荐模型 ID | 优势 |
-| :--- | :--- | :--- |
-| **Google** | `gemini/gemini-2.0-flash-exp` | **最佳保底**。免费额度极高，中文强。 |
-| **Groq** | `groq/llama-3.3-70b-versatile` | **最佳主力**。速度极快，TPM 限制较严。 |
+**切到本地 / 其他端点**只需改前三个值，例如指向自建 `whisper.cpp` HTTP server：
+```ini
+ASR_BASE_URL=http://localhost:9000/v1
+ASR_API_KEY=anything
+ASR_MODEL=whisper-large-v3
+```
 
-## ⚙️ 系统服务部署 (Systemd)
+### LLM 润色
 
-如果您使用 `uv tool install` 安装，Systemd 配置如下：
+```ini
+# 按优先级逗号分隔，前一个限流/失败自动切下一个
+LLM_MODEL=groq/llama-3.3-70b-versatile,groq/llama-3.1-8b-instant,gemini/gemini-2.0-flash-exp
+GROQ_API=gsk_...
+GEMINI_API=AIza...
+ANTHROPIC_API_KEY=sk-ant-...
+DEEPSEEK_API=sk-...
+XAI_API=xai-...
+# ZENMUX_URL=https://your-zenmux.example/v1
+# ZENMUX_API=...
+
+# 调优旋钮
+LLM_TEMPERATURE=0.2   # 越低越保真
+# LLM_TOP_P=0.9
+# LLM_MAX_TOKENS=4096
+```
+
+| 厂商   | 推荐模型 ID                          | 特点                          |
+| :----- | :----------------------------------- | :---------------------------- |
+| Groq   | `groq/llama-3.3-70b-versatile`       | 速度极快；TPM 限额严格        |
+| Google | `gemini/gemini-2.0-flash-exp`        | 免费额度高，中文处理稳定      |
+
+## ⚙️ Systemd 部署
 
 ```ini
 [Unit]
@@ -134,7 +124,6 @@ After=network.target
 
 [Service]
 User=your_user
-# 指向 uv 安装的二进制文件位置 (通常在 ~/.local/bin 或 /root/.local/bin)
 ExecStart=/home/your_user/.local/bin/whisper-bot-zh
 Restart=always
 RestartSec=10

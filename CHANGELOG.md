@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.2.0] - 2026-04-21
+
+### Breaking
+- **ASR backend replaced.** `faster-whisper` + local CUDA removed; now uses any
+  OpenAI-compatible audio transcription endpoint (Groq by default,
+  `whisper-large-v3`). Removed env keys: `WHISPER_MODEL_SIZE`,
+  `WHISPER_COMPUTE_TYPE`, `WHISPER_INITIAL_PROMPT`, `WHISPER_VAD_FILTER`.
+  Added: `ASR_BASE_URL`, `ASR_API_KEY`, `ASR_MODEL`, `ASR_LANGUAGE`,
+  `ASR_PROMPT`, `ASR_TEMPERATURE`. Existing `GROQ_API_KEY` in the env still
+  works — `ASR_API_KEY` falls back to it.
+- Removed `--model-dir` CLI flag (no more local model to manage).
+- Dropped heavy deps: `faster-whisper`, `nvidia-cudnn-cu12`,
+  `nvidia-cublas-cu12` (~2 GB on disk + ~3 GB VRAM at runtime).
+
+### Fixed
+- **LLM refinement "trailing commentary" hallucination.** The previous prompt
+  only forbade prefaces; models still appended `建议 / 补充 / 总结` blocks.
+  Rewrote the system prompt to explicitly forbid trailing content and to
+  instruct the model to stop at the end of the source text. User message also
+  wraps the transcript with a repeated "no commentary" boundary.
+
+### Added
+- Config knobs for LLM sampling: `LLM_TEMPERATURE` (default 0.2, was hardcoded
+  0.3), `LLM_TOP_P`, `LLM_MAX_TOKENS`. `top_p` / `max_tokens` are omitted from
+  the API call when unset so provider defaults apply.
+
+### Changed
+- `main.py` lost the 40-line `_ensure_cuda_libs_in_ld_path` block and the
+  re-exec dance — no longer needed without CUDA. Socket IPv4 patch retained.
+
 ## [0.1.0] - 2025-11-20
 
 ### Added
@@ -20,6 +50,7 @@
 - be5153f **UX Metadata**: Added execution metadata footer to bot replies:
     - Raw transcription now includes elapsed time (e.g., `⏱️ 耗时: 00:00:02.50`).
     - LLM refined output now includes the model name used (e.g., `🤖 模型: gemini/gemini-2.0-flash-exp`).
+    - 909a039 Added LLM processing duration to the refined text footer (e.g., `... (耗时: 00:00:01.23)`).
 - 1c03335 **Resilience**: Implemented multi-model fallback strategy for LLM service.
     - `LLM_MODEL` now accepts a comma-separated list (e.g., `groq/llama-3.3-70b,groq/llama-3.1-8b,gemini/flash`).
     - Automatically switches to the next model in the chain upon failure or Rate Limit (429), ensuring service continuity.
@@ -57,3 +88,7 @@
     - b2aeadc Updated `README.md` with a disclaimer about AI generation and added a comprehensive "Quick Install (CLI)" guide using `uv tool install`.
     - 0bf97d5 Added technical note to `README.md` detailing the research-backed rationale for selecting `large-v2` and `int8` quantization for Chinese ASR.
     - ac63300 **Performance**: Replaced disk-based temporary file handling with a full in-memory pipeline. Audio is now downloaded to RAM and piped through FFmpeg to Whisper, avoiding disk writes completely.
+aa1f687f6cbe11ae81e3ed89c8ed3906260f3be4
+- Added Telegram-safe long-text handling: raw transcripts and LLM-refined outputs now pass through a size guard that falls back to sending a UTF-8 `.txt` document when Markdown would exceed the ~4k character limit, preventing delivery failures on very long recordings.
+- Introduced `_send_text_with_limit` helper to centralize formatting, footer composition, and document fallback; reused for both ASR and LLM replies to avoid duplicated logic.
+- Expanded handler tests to cover oversized raw and refined messages, ensuring the file-fallback path is exercised; refreshed existing tests after ruff formatting. Note: global `mypy` still fails due to pre-existing untyped helpers and third-party stubs, unchanged in this commit.

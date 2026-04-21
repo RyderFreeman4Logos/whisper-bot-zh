@@ -1,6 +1,9 @@
-from typing import Callable, Dict, Any, Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from aiogram import BaseMiddleware
 from aiogram.types import Message
+
 from whisper_bot.services.auth import AuthService
 
 
@@ -9,7 +12,7 @@ class AuthMiddleware(BaseMiddleware):
         self.auth_service = auth_service
 
     async def __call__(
-        self, handler: Callable[[Message, Dict[str, Any]], Awaitable[Any]], event: Message, data: Dict[str, Any]
+        self, handler: Callable[[Message, dict[str, Any]], Awaitable[Any]], event: Message, data: dict[str, Any]
     ) -> Any:
         user = data.get("event_from_user")
         if not user:

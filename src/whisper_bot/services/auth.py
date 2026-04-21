@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import Set, Union
 
 import structlog
 
@@ -8,10 +7,10 @@ logger = structlog.get_logger(__name__)
 
 
 class AuthService:
-    def __init__(self, storage_file: Union[str, Path], admin_password: str):
+    def __init__(self, storage_file: str | Path, admin_password: str):
         self.storage_file = Path(storage_file)
         self.admin_password = admin_password
-        self.allowed_users: Set[int] = set()
+        self.allowed_users: set[int] = set()
         self._load_users()
 
     def _load_users(self) -> None:
@@ -20,14 +19,14 @@ class AuthService:
             return
 
         try:
-            with open(self.storage_file, "r", encoding="utf-8") as f:
+            with open(self.storage_file, encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     self.allowed_users = set(data)
                 else:
                     logger.warning("Auth file format error, resetting allowed users.")
                     self.allowed_users = set()
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             logger.error(f"Failed to load auth file: {e}")
             self.allowed_users = set()
 
@@ -39,7 +38,7 @@ class AuthService:
             # Atomic write via temp file usually safer, but simple open(w) is okay for now
             with open(self.storage_file, "w", encoding="utf-8") as f:
                 json.dump(list(self.allowed_users), f)
-        except IOError as e:
+        except OSError as e:
             logger.error(f"Failed to save auth file: {e}")
 
     def authenticate_user(self, user_id: int, password: str) -> bool:
