@@ -3,10 +3,20 @@ use anyhow::{Context, Result};
 use super::Settings;
 
 impl Settings {
+    /// Build the shared outbound HTTP client.
+    ///
+    /// # Errors
+    /// Returns an error if the configured proxy URL is invalid or the client
+    /// cannot be constructed.
     pub fn outbound_http_client(&self) -> Result<reqwest::Client> {
         build_http_client(self.proxy_url.as_deref())
     }
 
+    /// Build the Telegram-specific HTTP client.
+    ///
+    /// # Errors
+    /// Returns an error if the configured proxy URL is invalid or the Telegram
+    /// client cannot be constructed.
     pub fn telegram_client(&self) -> Result<telegram_reqwest::Client> {
         build_telegram_client(self.proxy_url.as_deref())
     }

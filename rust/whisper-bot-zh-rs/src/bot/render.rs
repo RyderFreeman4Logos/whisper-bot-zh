@@ -9,6 +9,11 @@ use teloxide::types::InputFile;
 pub use governor::TelegramGovernor;
 pub use reply::{dual_refinement_reply, single_refinement_reply, transcript_reply, RenderedReply};
 
+/// Deliver a rendered reply, falling back to a file when the text is too long.
+///
+/// # Errors
+/// Returns an error if Telegram rejects any intermediate edit, message, or
+/// document upload required to deliver the reply.
 pub async fn deliver(
     governor: &TelegramGovernor,
     target: &Message,
@@ -33,6 +38,10 @@ pub async fn deliver(
         .await
 }
 
+/// Update the current status message for a chat.
+///
+/// # Errors
+/// Returns an error if Telegram rejects the status edit.
 pub async fn update_status(
     governor: &TelegramGovernor,
     target: &Message,

@@ -92,6 +92,11 @@ impl ChatRefiner {
         &self.model
     }
 
+    /// Refine a transcript by calling the configured chat-completions endpoint.
+    ///
+    /// # Errors
+    /// Returns an error if the request times out, the HTTP call fails, the
+    /// response body is invalid, or the model returns an empty/non-success result.
     pub async fn refine(&self, transcript: &str) -> Result<RefinementResult> {
         let started = Instant::now();
         let request = self.request(transcript);

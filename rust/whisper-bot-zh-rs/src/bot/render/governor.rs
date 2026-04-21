@@ -9,14 +9,30 @@ use teloxide::{ApiError, RequestError};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::time::Instant;
 
-struct LastEditState {
-    last_edit_at: Option<Instant>,
+struct EditState {
+    next_allowed_at: Option<Instant>,
+}
+
+impl EditState {
+    fn delay_until_allowed(&self, now: Instant) -> Duration {
+        self.next_allowed_at
+            .map_or(Duration::ZERO, |next_allowed_at| {
+                next_allowed_at.saturating_duration_since(now)
+            })
+    }
+
+    fn extend_to(&mut self, next_allowed_at: Instant) {
+        self.next_allowed_at = Some(
+            self.next_allowed_at
+                .map_or(next_allowed_at, |current| current.max(next_allowed_at)),
+        );
+    }
 }
 
 #[derive(Clone)]
 pub struct TelegramGovernor {
     bot: Bot,
-    edit_states: Arc<Mutex<HashMap<ChatId, Arc<AsyncMutex<LastEditState>>>>>,
+    edit_states: Arc<Mutex<HashMap<ChatId, Arc<AsyncMutex<EditState>>>>>,
     min_interval: Duration,
     max_retries: usize,
 }
@@ -32,6 +48,11 @@ impl TelegramGovernor {
         }
     }
 
+    /// Edit a Telegram message with plain text while honoring per-chat pacing.
+    ///
+    /// # Errors
+    /// Returns an error if Telegram rejects the edit with an error other than
+    /// `MessageNotModified`, or if retries are exhausted after `RetryAfter`.
     pub async fn edit_plain_text(&self, target: &Message, text: &str) -> ResponseResult<()> {
         let chat_id = target.chat.id;
         let message_id = target.id;
@@ -53,6 +74,11 @@ impl TelegramGovernor {
         }
     }
 
+    /// Edit a Telegram message with HTML-formatted text while honoring per-chat pacing.
+    ///
+    /// # Errors
+    /// Returns an error if Telegram rejects the edit with an error other than
+    /// `MessageNotModified`, or if retries are exhausted after `RetryAfter`.
     pub async fn edit_html_text(&self, target: &Message, html: String) -> ResponseResult<()> {
         let chat_id = target.chat.id;
         let message_id = target.id;
@@ -74,6 +100,11 @@ impl TelegramGovernor {
         }
     }
 
+    /// Send a document to a Telegram chat with retry handling for write limits.
+    ///
+    /// # Errors
+    /// Returns an error if Telegram rejects the send operation, or if retries
+    /// are exhausted after `RetryAfter`.
     pub async fn send_document(
         &self,
         chat_id: ChatId,
@@ -89,6 +120,11 @@ impl TelegramGovernor {
         .await
     }
 
+    /// Send a text message to a Telegram chat with retry handling for write limits.
+    ///
+    /// # Errors
+    /// Returns an error if Telegram rejects the send operation, or if retries
+    /// are exhausted after `RetryAfter`.
     pub async fn send_message(
         &self,
         chat_id: ChatId,
@@ -113,14 +149,23 @@ impl TelegramGovernor {
         Fut: Future<Output = ResponseResult<T>>,
     {
         let edit_state = self.wait_for_edit_slot(chat_id).await;
-        let result = self.run_write_operation(operation).await;
-        drop(edit_state);
-        result
+        self.run_write_operation_with_edit_state(operation, Some(edit_state))
+            .await
     }
 
-    pub(super) async fn run_write_operation<T, Op, Fut>(
+    pub(super) async fn run_write_operation<T, Op, Fut>(&self, operation: Op) -> ResponseResult<T>
+    where
+        Op: FnMut() -> Fut,
+        Fut: Future<Output = ResponseResult<T>>,
+    {
+        self.run_write_operation_with_edit_state(operation, None)
+            .await
+    }
+
+    async fn run_write_operation_with_edit_state<T, Op, Fut>(
         &self,
         mut operation: Op,
+        edit_state: Option<Arc<AsyncMutex<EditState>>>,
     ) -> ResponseResult<T>
     where
         Op: FnMut() -> Fut,
@@ -129,44 +174,77 @@ impl TelegramGovernor {
         let mut retries = 0;
         loop {
             match operation().await {
-                Err(RequestError::RetryAfter(delay)) if retries < self.max_retries => {
+                Err(RequestError::RetryAfter(delay)) => {
+                    if let Some(edit_state) = edit_state.as_ref() {
+                        self.record_retry_after(edit_state, delay.duration()).await;
+                    }
+
+                    if retries >= self.max_retries {
+                        return Err(RequestError::RetryAfter(delay));
+                    }
+
                     retries += 1;
                     tokio::time::sleep(delay.duration()).await;
                 }
-                result => return result,
+                Ok(value) => {
+                    if let Some(edit_state) = edit_state.as_ref() {
+                        self.record_edit(edit_state).await;
+                    }
+                    return Ok(value);
+                }
+                Err(error) => return Err(error),
             }
         }
     }
 
-    async fn wait_for_edit_slot(&self, chat_id: ChatId) -> Arc<AsyncMutex<LastEditState>> {
+    async fn wait_for_edit_slot(&self, chat_id: ChatId) -> Arc<AsyncMutex<EditState>> {
         let edit_state = self.edit_state(chat_id);
-        let mut state = edit_state.lock().await;
-        let now = Instant::now();
-        let delay = state.last_edit_at.map_or(Duration::ZERO, |last_edit_at| {
-            self.min_interval
-                .saturating_sub(now.saturating_duration_since(last_edit_at))
-        });
-        if !delay.is_zero() {
+        loop {
+            let delay = {
+                let mut state = edit_state.lock().await;
+                let now = Instant::now();
+                let delay = state.delay_until_allowed(now);
+                if delay.is_zero() {
+                    state.extend_to(now + self.min_interval);
+                }
+                delay
+            };
+
+            if delay.is_zero() {
+                return edit_state;
+            }
+
             tokio::time::sleep(delay).await;
         }
-        state.last_edit_at = Some(Instant::now());
-        drop(state);
-        edit_state
     }
 
-    fn edit_state(&self, chat_id: ChatId) -> Arc<AsyncMutex<LastEditState>> {
+    async fn record_edit(&self, edit_state: &Arc<AsyncMutex<EditState>>) {
+        let mut state = edit_state.lock().await;
+        state.extend_to(Instant::now() + self.min_interval);
+    }
+
+    async fn record_retry_after(
+        &self,
+        edit_state: &Arc<AsyncMutex<EditState>>,
+        retry_after: Duration,
+    ) {
+        let mut state = edit_state.lock().await;
+        state.extend_to(Instant::now() + retry_after);
+    }
+
+    fn edit_state(&self, chat_id: ChatId) -> Arc<AsyncMutex<EditState>> {
         let now = Instant::now();
         let mut edit_states = self.edit_states.lock().expect("edit governor lock");
         Self::cleanup(&mut edit_states, now, self.min_interval);
-        Arc::clone(
-            edit_states
-                .entry(chat_id)
-                .or_insert_with(|| Arc::new(AsyncMutex::new(LastEditState { last_edit_at: None }))),
-        )
+        Arc::clone(edit_states.entry(chat_id).or_insert_with(|| {
+            Arc::new(AsyncMutex::new(EditState {
+                next_allowed_at: None,
+            }))
+        }))
     }
 
     fn cleanup(
-        edit_states: &mut HashMap<ChatId, Arc<AsyncMutex<LastEditState>>>,
+        edit_states: &mut HashMap<ChatId, Arc<AsyncMutex<EditState>>>,
         now: Instant,
         min_interval: Duration,
     ) {
@@ -177,8 +255,8 @@ impl TelegramGovernor {
             }
 
             match state.try_lock() {
-                Ok(state) => state.last_edit_at.is_none_or(|last_edit_at| {
-                    now.saturating_duration_since(last_edit_at) <= stale_after
+                Ok(state) => state.next_allowed_at.is_none_or(|next_allowed_at| {
+                    now.saturating_duration_since(next_allowed_at) <= stale_after
                 }),
                 Err(_) => true,
             }

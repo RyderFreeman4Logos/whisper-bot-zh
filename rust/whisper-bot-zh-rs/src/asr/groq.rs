@@ -26,6 +26,11 @@ struct TranscriptResponse {
 }
 
 impl AsrService {
+    /// Build the ASR service from application settings.
+    ///
+    /// # Errors
+    /// Returns an error if no ASR API key is configured or the outbound HTTP
+    /// client cannot be constructed from the current settings.
     pub fn new(settings: &Settings) -> Result<Self> {
         let api_key = settings
             .asr_effective_api_key()
@@ -73,6 +78,12 @@ impl AsrService {
         &self.model
     }
 
+    /// Submit WAV audio to the configured ASR backend and return the transcript.
+    ///
+    /// # Errors
+    /// Returns an error if the concurrency limiter is closed, the request fails,
+    /// the backend returns a non-success status, or the response body cannot be
+    /// parsed as a transcript payload.
     pub async fn transcribe(&self, audio: Bytes) -> Result<String> {
         let _permit = self
             .limiter

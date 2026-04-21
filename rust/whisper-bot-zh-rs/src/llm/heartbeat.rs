@@ -4,6 +4,10 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use tokio::time::MissedTickBehavior;
 
+/// Run a fallible future while logging periodic heartbeat messages.
+///
+/// # Errors
+/// Returns any error produced by `future`.
 pub async fn run_with_heartbeat<T, F>(model: &str, interval: Duration, future: F) -> Result<T>
 where
     F: Future<Output = Result<T>>,

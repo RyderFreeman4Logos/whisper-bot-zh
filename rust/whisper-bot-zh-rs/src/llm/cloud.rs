@@ -20,6 +20,11 @@ impl CloudRefiner {
         Self { limiter, models }
     }
 
+    /// Build the cloud refiner chain from the configured cloud model list.
+    ///
+    /// # Errors
+    /// Returns an error if the outbound HTTP client cannot be built or any
+    /// configured cloud model cannot be resolved into a chat client.
     pub fn from_settings(settings: &Settings) -> Result<Option<Self>> {
         let client = settings.outbound_http_client()?;
         let limiter = Arc::new(Semaphore::new(settings.llm_cloud_max_concurrent));
@@ -44,6 +49,11 @@ impl CloudRefiner {
             .unwrap_or_default()
     }
 
+    /// Refine a transcript using the configured cloud fallback chain.
+    ///
+    /// # Errors
+    /// Returns an error if the concurrency limiter is closed or every configured
+    /// cloud model fails to produce a refinement.
     pub async fn refine(&self, transcript: &str) -> Result<RefinementResult> {
         let _permit = self
             .limiter

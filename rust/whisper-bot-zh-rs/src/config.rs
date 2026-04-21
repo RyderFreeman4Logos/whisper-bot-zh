@@ -56,6 +56,12 @@ pub struct Settings {
 }
 
 impl Settings {
+    /// Load settings from CLI overrides, the environment, and the optional `.env` file.
+    ///
+    /// # Errors
+    /// Returns an error if the env file cannot be loaded, required variables are
+    /// missing or invalid, default directories cannot be resolved, or validation
+    /// fails.
     pub fn load(cli_env_file: Option<&Path>, cli_data_dir: Option<&Path>) -> Result<Self> {
         let env_file_path = resolve_env_file_path(cli_env_file, cli_data_dir)?;
 

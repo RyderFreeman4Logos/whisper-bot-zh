@@ -17,6 +17,11 @@ use super::super::{flow, render};
 
 const FFMPEG_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// Handle a Telegram voice or audio message end to end.
+///
+/// # Errors
+/// Returns an error only if Telegram rejects the final user-visible recovery
+/// reply after an internal processing failure.
 pub async fn handle_audio(
     bot: &Bot,
     governor: &TelegramGovernor,

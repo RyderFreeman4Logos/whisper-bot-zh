@@ -29,6 +29,11 @@ struct DispatchDeps {
     voice_limiter: Arc<Semaphore>,
 }
 
+/// Start the Telegram bot dispatcher and serve updates until shutdown.
+///
+/// # Errors
+/// Returns an error if startup dependencies cannot be constructed or if the bot
+/// profile lookup fails before the dispatcher starts.
 pub async fn run(settings: Settings) -> Result<()> {
     let settings = Arc::new(settings);
     let bot = Bot::with_client(settings.bot_token.clone(), settings.telegram_client()?);

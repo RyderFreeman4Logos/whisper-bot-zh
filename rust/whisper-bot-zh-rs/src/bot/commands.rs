@@ -20,6 +20,11 @@ pub fn is_supported_command(text: &str, bot_username: &str) -> bool {
     command_name(text, bot_username).is_some_and(|command| matches!(command, "/start" | "/auth"))
 }
 
+/// Handle a supported command message.
+///
+/// # Errors
+/// Returns an error if Telegram rejects any reply sent while processing the
+/// command.
 pub async fn handle_command(
     governor: &TelegramGovernor,
     message: &Message,

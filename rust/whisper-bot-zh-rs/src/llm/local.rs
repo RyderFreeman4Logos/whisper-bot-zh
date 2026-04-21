@@ -19,6 +19,11 @@ impl LocalRefiner {
         Self { inner, limiter }
     }
 
+    /// Build the local refiner from the configured local endpoint settings.
+    ///
+    /// # Errors
+    /// Returns an error if the local configuration is incomplete or the outbound
+    /// HTTP client cannot be constructed.
     pub fn from_settings(settings: &Settings) -> Result<Option<Self>> {
         let Some(base_url) = settings.llm_local_base_url.as_deref() else {
             return Ok(None);
@@ -59,6 +64,11 @@ impl LocalRefiner {
         self.inner.model()
     }
 
+    /// Refine a transcript through the configured local model endpoint.
+    ///
+    /// # Errors
+    /// Returns an error if the concurrency limiter is closed or the underlying
+    /// chat refiner request fails.
     pub async fn refine(&self, transcript: &str) -> Result<RefinementResult> {
         let _permit = self
             .limiter
