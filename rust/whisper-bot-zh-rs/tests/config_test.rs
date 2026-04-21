@@ -135,3 +135,44 @@ fn cli_data_dir_bypasses_home() {
     assert_eq!(settings.data_dir, cli_data_dir);
     assert_eq!(settings.cache_dir, cache_dir);
 }
+
+#[test]
+fn cli_data_dir_wins_when_finding_env_file() {
+    let temp_dir = tempdir().expect("temp dir");
+    let env_data_dir = temp_dir.path().join("env-data");
+    let cli_data_dir = temp_dir.path().join("cli-data");
+    let cache_dir = temp_dir.path().join("cache");
+    std::fs::create_dir_all(&env_data_dir).expect("create env data dir");
+    std::fs::create_dir_all(&cli_data_dir).expect("create cli data dir");
+    std::fs::write(
+        env_data_dir.join(".env"),
+        "BOT_TOKEN=env-token\nACCESS_PASSWORD=env-password\n",
+    )
+    .expect("write env data dir .env");
+    std::fs::write(
+        cli_data_dir.join(".env"),
+        "BOT_TOKEN=cli-token\nACCESS_PASSWORD=cli-password\n",
+    )
+    .expect("write cli data dir .env");
+
+    let _env = EnvGuard::set(&[
+        ("HOME", None),
+        (
+            "DATA_DIR",
+            Some(env_data_dir.to_str().expect("utf-8 env data dir")),
+        ),
+        (
+            "CACHE_DIR",
+            Some(cache_dir.to_str().expect("utf-8 cache dir")),
+        ),
+        ("BOT_TOKEN", None),
+        ("ACCESS_PASSWORD", None),
+    ]);
+
+    let settings = Settings::load(None, Some(cli_data_dir.as_path()))
+        .expect("cli data dir should control env-file discovery");
+
+    assert_eq!(settings.bot_token, "cli-token");
+    assert_eq!(settings.access_password, "cli-password");
+    assert_eq!(settings.data_dir, cli_data_dir);
+}

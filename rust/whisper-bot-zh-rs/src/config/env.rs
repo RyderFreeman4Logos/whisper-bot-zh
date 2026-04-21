@@ -12,12 +12,12 @@ pub fn resolve_env_file_path(
         return Ok(Some(path.to_path_buf()));
     }
 
-    if let Some(data_dir) = optional("DATA_DIR") {
-        return Ok(env_file_in(Path::new(&data_dir)));
-    }
-
     if let Some(data_dir) = cli_data_dir {
         return Ok(env_file_in(data_dir));
+    }
+
+    if let Some(data_dir) = optional("DATA_DIR") {
+        return Ok(env_file_in(Path::new(&data_dir)));
     }
 
     let default_dir = default_data_dir()?;

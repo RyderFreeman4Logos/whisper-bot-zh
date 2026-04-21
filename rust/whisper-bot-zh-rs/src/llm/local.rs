@@ -33,6 +33,10 @@ impl LocalRefiner {
             base_url,
             api_key,
             model,
+            settings
+                .llm_system_prompt
+                .clone()
+                .unwrap_or_else(|| super::prompt::SYSTEM_PROMPT.to_owned()),
             settings.local_timeout(),
             settings.heartbeat_interval(),
             settings.llm_temperature,

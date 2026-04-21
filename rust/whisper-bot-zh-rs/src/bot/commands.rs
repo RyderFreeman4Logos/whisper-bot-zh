@@ -14,17 +14,18 @@ enum AuthOutcome {
 }
 
 #[must_use]
-pub fn is_supported_command(text: &str) -> bool {
-    command_name(text).is_some_and(|command| matches!(command, "/start" | "/auth"))
+pub fn is_supported_command(text: &str, bot_username: &str) -> bool {
+    command_name(text, bot_username).is_some_and(|command| matches!(command, "/start" | "/auth"))
 }
 
 pub async fn handle_command(
     bot: &Bot,
     message: &Message,
     text: &str,
+    bot_username: &str,
     auth: &AuthService,
 ) -> ResponseResult<()> {
-    match command_name(text) {
+    match command_name(text, bot_username) {
         Some("/start") => start_command(bot, message, command_args(text), auth).await,
         Some("/auth") => auth_command(bot, message, command_args(text), auth).await,
         _ => Ok(()),
@@ -92,9 +93,13 @@ async fn authenticate(
     Ok(())
 }
 
-fn command_name(text: &str) -> Option<&str> {
+fn command_name<'a>(text: &'a str, bot_username: &str) -> Option<&'a str> {
     let token = text.split_whitespace().next()?;
-    Some(token.split_once('@').map_or(token, |(name, _)| name))
+    match token.split_once('@') {
+        Some((_name, target)) if !target.eq_ignore_ascii_case(bot_username) => None,
+        Some((name, _)) => Some(name),
+        None => Some(token),
+    }
 }
 
 fn command_args(text: &str) -> Option<&str> {
@@ -113,7 +118,10 @@ fn auth_reply(outcome: AuthOutcome) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{auth_reply, AuthOutcome, AUTH_INTERNAL_ERROR_REPLY, AUTH_INVALID_PASSWORD_REPLY};
+    use super::{
+        auth_reply, command_name, AuthOutcome, AUTH_INTERNAL_ERROR_REPLY,
+        AUTH_INVALID_PASSWORD_REPLY,
+    };
 
     #[test]
     fn internal_error_reply_is_distinct_from_wrong_password() {
@@ -124,6 +132,19 @@ mod tests {
         assert_ne!(
             auth_reply(AuthOutcome::InternalError),
             AUTH_INVALID_PASSWORD_REPLY
+        );
+    }
+
+    #[test]
+    fn ignores_commands_addressed_to_other_bots() {
+        assert_eq!(command_name("/auth@other_bot secret", "this_bot"), None);
+    }
+
+    #[test]
+    fn accepts_commands_addressed_to_this_bot() {
+        assert_eq!(
+            command_name("/auth@this_bot secret", "this_bot"),
+            Some("/auth")
         );
     }
 }

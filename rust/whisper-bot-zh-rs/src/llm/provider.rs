@@ -141,6 +141,10 @@ mod tests {
             &resolved.base_url,
             resolved.api_key,
             &resolved.model_name,
+            settings
+                .llm_system_prompt
+                .clone()
+                .unwrap_or_else(|| crate::llm::prompt::SYSTEM_PROMPT.to_owned()),
             settings.cloud_timeout(),
             settings.heartbeat_interval(),
             settings.llm_temperature,

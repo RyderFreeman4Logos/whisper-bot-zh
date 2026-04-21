@@ -6,6 +6,7 @@ use serde_json::json;
 use tracing_subscriber::fmt::MakeWriter;
 use wiremock::ResponseTemplate;
 
+use whisper_bot_zh::llm::prompt::SYSTEM_PROMPT;
 use whisper_bot_zh::llm::ChatRefiner;
 
 pub fn refiner(base_url: &str, api_key: &str, model: &str) -> ChatRefiner {
@@ -14,6 +15,7 @@ pub fn refiner(base_url: &str, api_key: &str, model: &str) -> ChatRefiner {
         base_url,
         api_key.to_owned(),
         model,
+        SYSTEM_PROMPT.to_owned(),
         Duration::from_secs(2),
         Duration::from_secs(1),
         0.2,
@@ -28,6 +30,7 @@ pub fn slow_refiner(base_url: &str) -> ChatRefiner {
         base_url,
         "cloud-secret".to_owned(),
         "slow-model",
+        SYSTEM_PROMPT.to_owned(),
         Duration::from_secs(2),
         Duration::from_millis(20),
         0.2,

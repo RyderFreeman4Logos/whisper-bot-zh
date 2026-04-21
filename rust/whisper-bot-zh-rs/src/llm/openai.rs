@@ -13,6 +13,7 @@ pub struct ChatRefiner {
     endpoint: String,
     api_key: String,
     model: String,
+    system_prompt: String,
     timeout: std::time::Duration,
     heartbeat_interval: std::time::Duration,
     temperature: f32,
@@ -60,6 +61,7 @@ impl ChatRefiner {
         base_url: &str,
         api_key: String,
         model: &str,
+        system_prompt: String,
         timeout: std::time::Duration,
         heartbeat_interval: std::time::Duration,
         temperature: f32,
@@ -71,6 +73,7 @@ impl ChatRefiner {
             endpoint: format!("{}/chat/completions", base_url.trim_end_matches('/')),
             api_key,
             model: model.to_owned(),
+            system_prompt,
             timeout,
             heartbeat_interval,
             temperature,
@@ -119,7 +122,7 @@ impl ChatRefiner {
             messages: [
                 ChatMessage {
                     role: "system",
-                    content: prompt::SYSTEM_PROMPT,
+                    content: &self.system_prompt,
                 },
                 ChatMessage {
                     role: "user",

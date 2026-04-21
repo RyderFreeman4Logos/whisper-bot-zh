@@ -26,6 +26,7 @@ pub struct Settings {
     pub asr_temperature: f32,
 
     pub llm_model: Option<String>,
+    pub llm_system_prompt: Option<String>,
     pub llm_temperature: f32,
     pub llm_top_p: Option<f32>,
     pub llm_max_tokens: Option<u32>,
@@ -87,6 +88,7 @@ impl Settings {
             asr_temperature: optional_parsed("ASR_TEMPERATURE")?.unwrap_or(0.0),
 
             llm_model: optional("LLM_MODEL"),
+            llm_system_prompt: optional("LLM_SYSTEM_PROMPT"),
             llm_temperature: optional_parsed("LLM_TEMPERATURE")?.unwrap_or(0.2),
             llm_top_p: optional_parsed("LLM_TOP_P")?,
             llm_max_tokens: optional_parsed("LLM_MAX_TOKENS")?,
