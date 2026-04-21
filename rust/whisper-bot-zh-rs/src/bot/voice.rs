@@ -107,7 +107,9 @@ async fn handle_audio_inner(
         .context("failed to send refinement status")?;
 
     if llm.has_cloud() && llm.has_local() {
-        for snapshot in flow::dual::collect(llm, &transcript).await? {
+        let mut updates = flow::dual::collect(llm.clone(), transcript.clone());
+        while let Some(snapshot) = updates.recv().await {
+            let snapshot = snapshot?;
             render::deliver(
                 bot,
                 &refinement_message,

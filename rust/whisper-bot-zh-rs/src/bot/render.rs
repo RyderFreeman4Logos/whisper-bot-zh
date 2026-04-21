@@ -1,5 +1,6 @@
 use teloxide::prelude::*;
 use teloxide::types::{InputFile, ParseMode};
+use teloxide::{ApiError, RequestError};
 
 use crate::llm::RefinementResult;
 use crate::util::format_duration;
@@ -76,8 +77,7 @@ pub fn dual_refinement_reply(
 
 pub async fn deliver(bot: &Bot, target: &Message, reply: RenderedReply) -> ResponseResult<()> {
     if should_send_as_file(&reply.plain) {
-        bot.edit_message_text(target.chat.id, target.id, "文本较长，已作为文件发送。")
-            .await?;
+        edit_plain_text(bot, target, "文本较长，已作为文件发送。").await?;
         bot.send_document(
             target.chat.id,
             InputFile::memory(reply.plain.into_bytes()).file_name(reply.file_name),
@@ -87,10 +87,26 @@ pub async fn deliver(bot: &Bot, target: &Message, reply: RenderedReply) -> Respo
         return Ok(());
     }
 
-    bot.edit_message_text(target.chat.id, target.id, reply.html)
-        .parse_mode(ParseMode::Html)
-        .await?;
+    edit_html_text(bot, target, reply.html).await?;
     Ok(())
+}
+
+async fn edit_plain_text(bot: &Bot, target: &Message, text: &str) -> ResponseResult<()> {
+    match bot.edit_message_text(target.chat.id, target.id, text).await {
+        Ok(_) | Err(RequestError::Api(ApiError::MessageNotModified)) => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+async fn edit_html_text(bot: &Bot, target: &Message, html: String) -> ResponseResult<()> {
+    match bot
+        .edit_message_text(target.chat.id, target.id, html)
+        .parse_mode(ParseMode::Html)
+        .await
+    {
+        Ok(_) | Err(RequestError::Api(ApiError::MessageNotModified)) => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 fn single_block_reply(content: &str, footer: String, file_name: &'static str) -> RenderedReply {

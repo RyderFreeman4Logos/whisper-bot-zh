@@ -110,6 +110,70 @@ async fn dual_mode_returns_both_results() {
     assert!(results.iter().any(|result| result.model == "qwen-local"));
 }
 
+#[tokio::test]
+async fn dual_progress_streams_first_completed_model() {
+    let cloud_server = MockServer::start().await;
+    let local_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/chat/completions"))
+        .and(body_partial_json(json!({ "model": "groq-fast" })))
+        .respond_with(success_template("cloud output"))
+        .mount(&cloud_server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/chat/completions"))
+        .and(body_partial_json(json!({ "model": "qwen-local" })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_millis(120))
+                .set_body_json(chat_body("local output")),
+        )
+        .mount(&local_server)
+        .await;
+
+    let service = LlmService::from_refiners(
+        Some(CloudRefiner::new(vec![refiner(
+            &cloud_server.uri(),
+            "cloud-secret",
+            "groq-fast",
+        )])),
+        Some(LocalRefiner::new(refiner(
+            &local_server.uri(),
+            "local-secret",
+            "qwen-local",
+        ))),
+    );
+
+    let mut updates = whisper_bot_zh::bot::flow::dual::collect(service, "原始文本".to_owned());
+
+    let first = tokio::time::timeout(Duration::from_millis(60), updates.recv())
+        .await
+        .expect("cloud update should stream before local response")
+        .expect("first progress update should exist")
+        .expect("first progress update should succeed");
+    assert_eq!(
+        first.cloud.as_ref().map(|result| result.model.as_str()),
+        Some("groq-fast")
+    );
+    assert!(first.local.is_none());
+
+    let second = tokio::time::timeout(Duration::from_millis(200), updates.recv())
+        .await
+        .expect("local update should arrive after the first streamed result")
+        .expect("second progress update should exist")
+        .expect("second progress update should succeed");
+    assert_eq!(
+        second.local.as_ref().map(|result| result.model.as_str()),
+        Some("qwen-local")
+    );
+    assert_eq!(
+        second.cloud.as_ref().map(|result| result.model.as_str()),
+        Some("groq-fast")
+    );
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn heartbeat_logs_while_waiting_for_slow_response() {
     let server = MockServer::start().await;
