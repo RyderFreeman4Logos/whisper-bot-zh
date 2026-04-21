@@ -29,3 +29,23 @@ fn cli_data_dir_overrides_env_file_data_dir() {
 
     assert_eq!(settings.data_dir, cli_data_dir);
 }
+
+#[test]
+fn rejects_non_positive_timeout_values() {
+    let _env = EnvGuard::set(&[
+        ("BOT_TOKEN", None),
+        ("ACCESS_PASSWORD", None),
+        ("LLM_CLOUD_TIMEOUT_SEC", None),
+    ]);
+    let temp_dir = tempdir().expect("temp dir");
+    let env_file = temp_dir.path().join("bot.env");
+    fs::write(
+        &env_file,
+        "BOT_TOKEN=test-token\nACCESS_PASSWORD=test-password\nLLM_CLOUD_TIMEOUT_SEC=-1\n",
+    )
+    .expect("write env file");
+
+    let error = Settings::load(Some(&env_file), None).expect_err("invalid timeout should fail");
+
+    assert!(error.to_string().contains("LLM_CLOUD_TIMEOUT_SEC"));
+}

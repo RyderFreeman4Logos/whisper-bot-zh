@@ -33,7 +33,7 @@ impl AsrService {
             .context("ASR_API_KEY, GROQ_API, GROQ_API_KEY, or OPENAI_API_KEY must be configured")?;
 
         Ok(Self::from_parts(
-            reqwest::Client::new(),
+            settings.outbound_http_client()?,
             &settings.asr_base_url,
             api_key,
             &settings.asr_model,

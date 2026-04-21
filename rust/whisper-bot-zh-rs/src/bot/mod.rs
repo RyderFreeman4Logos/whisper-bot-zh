@@ -21,7 +21,7 @@ type HandlerResult = ResponseResult<()>;
 
 pub async fn run(settings: Settings) -> Result<()> {
     let settings = Arc::new(settings);
-    let bot = Bot::new(settings.bot_token.clone());
+    let bot = Bot::with_client(settings.bot_token.clone(), settings.telegram_client()?);
     let asr = Arc::new(AsrService::new(settings.as_ref())?);
     let auth = Arc::new(AuthService::new(settings.as_ref()).await?);
     let llm = Arc::new(LlmService::new(settings.as_ref())?);

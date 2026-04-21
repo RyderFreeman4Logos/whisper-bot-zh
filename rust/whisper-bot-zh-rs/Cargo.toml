@@ -19,6 +19,7 @@ path = "src/lib.rs"
 teloxide = { version = "0.13", default-features = false, features = ["macros", "ctrlc_handler", "rustls"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "process", "io-util", "fs", "sync"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "stream", "rustls-tls"] }
+telegram_reqwest = { package = "reqwest", version = "0.11", default-features = false, features = ["json", "multipart", "stream", "rustls-tls"] }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

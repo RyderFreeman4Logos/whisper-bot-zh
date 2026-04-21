@@ -1,9 +1,12 @@
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
+#[path = "config/http.rs"]
+mod http;
 #[path = "config/paths.rs"]
 mod paths;
+#[path = "config/timeouts.rs"]
+mod timeouts;
 use paths::{default_cache_dir, default_data_dir};
 
 #[derive(Debug, Clone)]
@@ -30,7 +33,6 @@ pub struct Settings {
     pub llm_cloud_timeout_sec: f64,
     pub llm_local_timeout_sec: f64,
     pub llm_heartbeat_interval_sec: f64,
-
     pub groq_api: Option<String>,
     pub gemini_api: Option<String>,
     pub anthropic_api_key: Option<String>,
@@ -39,7 +41,7 @@ pub struct Settings {
     pub zenmux_api: Option<String>,
     pub zenmux_url: Option<String>,
     pub openai_api_key: Option<String>,
-
+    pub proxy_url: Option<String>,
     pub data_dir: PathBuf,
     pub cache_dir: PathBuf,
 }
@@ -82,7 +84,8 @@ impl Settings {
             llm_local_model: optional("LLM_LOCAL_MODEL"),
             llm_cloud_timeout_sec: optional_parsed("LLM_CLOUD_TIMEOUT_SEC")?.unwrap_or(120.0),
             llm_local_timeout_sec: optional_parsed("LLM_LOCAL_TIMEOUT_SEC")?.unwrap_or(1800.0),
-            llm_heartbeat_interval_sec: optional_parsed("LLM_HEARTBEAT_INTERVAL_SEC")?.unwrap_or(20.0),
+            llm_heartbeat_interval_sec: optional_parsed("LLM_HEARTBEAT_INTERVAL_SEC")?
+                .unwrap_or(20.0),
             groq_api: optional("GROQ_API").or_else(|| optional("GROQ_API_KEY")),
             gemini_api: optional("GEMINI_API"),
             anthropic_api_key: optional("ANTHROPIC_API_KEY").or_else(|| optional("ANTHROPIC_API")),
@@ -91,6 +94,7 @@ impl Settings {
             zenmux_api: optional("ZENMUX_API"),
             zenmux_url: optional("ZENMUX_URL"),
             openai_api_key: optional("OPENAI_API_KEY"),
+            proxy_url: optional("PROXY_URL"),
             data_dir: cli_data_dir
                 .map(Path::to_path_buf)
                 .or_else(|| optional("DATA_DIR").map(PathBuf::from))
@@ -109,6 +113,7 @@ impl Settings {
         if self.access_password.trim().is_empty() {
             bail!("ACCESS_PASSWORD must not be empty");
         }
+        timeouts::validate(self)?;
         Ok(())
     }
 
@@ -122,21 +127,6 @@ impl Settings {
         self.llm_local_base_url.is_some()
             && self.llm_local_api_key.is_some()
             && self.llm_local_model.is_some()
-    }
-
-    #[must_use]
-    pub fn cloud_timeout(&self) -> Duration {
-        Duration::from_secs_f64(self.llm_cloud_timeout_sec)
-    }
-
-    #[must_use]
-    pub fn local_timeout(&self) -> Duration {
-        Duration::from_secs_f64(self.llm_local_timeout_sec)
-    }
-
-    #[must_use]
-    pub fn heartbeat_interval(&self) -> Duration {
-        Duration::from_secs_f64(self.llm_heartbeat_interval_sec)
     }
 
     #[must_use]

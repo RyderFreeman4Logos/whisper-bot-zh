@@ -17,10 +17,11 @@ impl CloudRefiner {
     }
 
     pub fn from_settings(settings: &Settings) -> Result<Option<Self>> {
+        let client = settings.outbound_http_client()?;
         let models = settings
             .cloud_models()
             .into_iter()
-            .map(|configured_model| build_model_client(settings, &configured_model))
+            .map(|configured_model| build_model_client(settings, client.clone(), &configured_model))
             .collect::<Result<Vec<_>>>()?;
 
         if models.is_empty() {
@@ -47,12 +48,16 @@ impl CloudRefiner {
     }
 }
 
-fn build_model_client(settings: &Settings, configured_model: &str) -> Result<ChatRefiner> {
+fn build_model_client(
+    settings: &Settings,
+    client: reqwest::Client,
+    configured_model: &str,
+) -> Result<ChatRefiner> {
     let resolved = resolve_model(settings, configured_model)
         .with_context(|| format!("failed to configure cloud model `{configured_model}`"))?;
 
     Ok(ChatRefiner::new(
-        reqwest::Client::new(),
+        client,
         &resolved.base_url,
         resolved.api_key,
         &resolved.model_name,

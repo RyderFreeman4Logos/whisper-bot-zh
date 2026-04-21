@@ -29,7 +29,7 @@ impl LocalRefiner {
             .context("LLM_LOCAL_MODEL must be set for local refinement")?;
 
         Ok(Some(Self::new(ChatRefiner::new(
-            reqwest::Client::new(),
+            settings.outbound_http_client()?,
             base_url,
             api_key,
             model,
