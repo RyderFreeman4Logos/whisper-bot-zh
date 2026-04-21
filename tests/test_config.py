@@ -19,16 +19,24 @@ def test_settings_defaults():
         assert settings.ACCESS_PASSWORD == "test_password"
         assert settings.MAX_CONCURRENT_TASKS == 1
         assert settings.LOG_LEVEL == "INFO"
-        assert settings.WHISPER_MODEL_SIZE == "large-v2"
-        assert settings.WHISPER_COMPUTE_TYPE == "int8"
-        assert settings.WHISPER_VAD_FILTER is True
-        assert settings.WHISPER_INITIAL_PROMPT == "以下是一段简体中文内容:"
 
-        # Verify paths
+        # ASR defaults target Groq
+        assert settings.ASR_BASE_URL == "https://api.groq.com/openai/v1"
+        assert settings.ASR_MODEL == "whisper-large-v3"
+        assert settings.ASR_LANGUAGE == "zh"
+        assert settings.ASR_PROMPT == "以下是一段简体中文内容:"
+        assert settings.ASR_TEMPERATURE == 0.0
+        assert settings.ASR_API_KEY is None  # falls back at runtime
+
+        # LLM tuning knobs
+        assert settings.LLM_TEMPERATURE == 0.2
+        assert settings.LLM_TOP_P is None
+        assert settings.LLM_MAX_TOKENS is None
+
+        # Paths
         assert settings.DATA_DIR == Path.home() / ".config" / "whisper-bot-zh"
         assert settings.CACHE_DIR == Path.home() / ".cache" / "whisper-bot-zh"
         assert settings.ALLOWED_USERS_FILE == settings.DATA_DIR / "allowed_users.json"
-        assert settings.MODEL_DIR == settings.CACHE_DIR / "models"
         assert settings.TEMP_DIR == settings.CACHE_DIR / "temp"
 
 
@@ -52,25 +60,30 @@ def test_settings_custom_values():
         mp.setenv("BOT_TOKEN", "custom_token")
         mp.setenv("ACCESS_PASSWORD", "custom_pass")
         mp.setenv("MAX_CONCURRENT_TASKS", "4")
-        mp.setenv("WHISPER_MODEL_SIZE", "medium")
-        mp.setenv("WHISPER_COMPUTE_TYPE", "float32")
-        mp.setenv("WHISPER_VAD_FILTER", "False")
-        mp.setenv("WHISPER_INITIAL_PROMPT", "Custom Prompt")
+        mp.setenv("ASR_BASE_URL", "http://localhost:9000/v1")
+        mp.setenv("ASR_MODEL", "whisper-cpp")
+        mp.setenv("ASR_LANGUAGE", "en")
+        mp.setenv("ASR_PROMPT", "Custom Prompt")
+        mp.setenv("ASR_TEMPERATURE", "0.2")
+        mp.setenv("LLM_TEMPERATURE", "0.5")
+        mp.setenv("LLM_TOP_P", "0.9")
+        mp.setenv("LLM_MAX_TOKENS", "2048")
 
         # Custom paths
         mp.setenv("DATA_DIR", "/tmp/config_test")
         mp.setenv("CACHE_DIR", "/tmp/cache_test")
-        mp.setenv("MODEL_DIR", "/tmp/models_test")
 
         settings = Settings()
         assert settings.MAX_CONCURRENT_TASKS == 4
-        assert settings.WHISPER_MODEL_SIZE == "medium"
-        assert settings.WHISPER_COMPUTE_TYPE == "float32"
-        assert settings.WHISPER_VAD_FILTER is False
-        assert settings.WHISPER_INITIAL_PROMPT == "Custom Prompt"
+        assert settings.ASR_BASE_URL == "http://localhost:9000/v1"
+        assert settings.ASR_MODEL == "whisper-cpp"
+        assert settings.ASR_LANGUAGE == "en"
+        assert settings.ASR_PROMPT == "Custom Prompt"
+        assert settings.ASR_TEMPERATURE == 0.2
+        assert settings.LLM_TEMPERATURE == 0.5
+        assert settings.LLM_TOP_P == 0.9
+        assert settings.LLM_MAX_TOKENS == 2048
 
         assert settings.DATA_DIR == Path("/tmp/config_test")
         assert settings.CACHE_DIR == Path("/tmp/cache_test")
-        assert settings.MODEL_DIR == Path("/tmp/models_test")
-        # Derived defaults should follow base
         assert settings.ALLOWED_USERS_FILE == Path("/tmp/config_test/allowed_users.json")

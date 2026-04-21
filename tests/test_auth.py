@@ -1,4 +1,3 @@
-
 import pytest
 
 from whisper_bot.services.auth import AuthService

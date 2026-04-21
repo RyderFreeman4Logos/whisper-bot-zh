@@ -9,7 +9,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.filters.command import CommandObject
 from aiogram.types import BufferedInputFile, Message
 
-from whisper_bot.services.asr import WhisperEngine
+from whisper_bot.services.asr import AsrClient
 from whisper_bot.services.auth import AuthService
 from whisper_bot.services.llm import LLMService
 from whisper_bot.utils import convert_audio_memory
@@ -77,7 +77,7 @@ async def auth_command(message: Message, command: CommandObject, auth_service: A
 
 
 @router.message(F.voice | F.audio)
-async def voice_message_handler(message: Message, bot: Bot, asr_engine: WhisperEngine, llm_service: LLMService):
+async def voice_message_handler(message: Message, bot: Bot, asr_client: AsrClient, llm_service: LLMService):
     """Handle voice and audio messages entirely in memory."""
     # Prefer voice, then audio
     attachment = message.voice or message.audio
@@ -108,7 +108,7 @@ async def voice_message_handler(message: Message, bot: Bot, asr_engine: WhisperE
         await processing_msg.edit_text("🔄 正在进行语音识别 (排队中)...")
 
         start_time = time.time()
-        text = await asr_engine.transcribe(wav_memory)
+        text = await asr_client.transcribe(wav_memory)
         duration = time.time() - start_time
 
         # 4. Reply raw result
@@ -117,10 +117,7 @@ async def voice_message_handler(message: Message, bot: Bot, asr_engine: WhisperE
             return
 
         formatted_duration = _format_duration(duration)
-        footer_text = (
-            f"🎙️ 由 Whisper 模型 ({asr_engine.model_size}) "
-            f"以 {asr_engine.compute_type} 精度转录，耗时: {formatted_duration}"
-        )
+        footer_text = f"🎙️ 由模型 {asr_client.model} 转录，耗时: {formatted_duration}"
 
         await _send_text_with_limit(
             bot=bot,

@@ -8,7 +8,7 @@ from aiogram.types import Chat, Message, User
 
 from whisper_bot.bot import handlers
 from whisper_bot.bot.handlers import auth_command, voice_message_handler
-from whisper_bot.services.asr import WhisperEngine
+from whisper_bot.services.asr import AsrClient
 from whisper_bot.services.auth import AuthService
 
 
@@ -31,7 +31,7 @@ def mock_auth_service():
 
 @pytest.fixture
 def mock_asr_engine():
-    return MagicMock(spec=WhisperEngine)
+    return MagicMock(spec=AsrClient)
 
 
 @pytest.mark.asyncio
@@ -65,8 +65,7 @@ async def test_voice_handler_success(mock_message, mock_asr_engine):
     mock_bot.download_file = AsyncMock()
 
     mock_asr_engine.transcribe = AsyncMock(return_value="转写文本")
-    mock_asr_engine.model_size = "large-v2"
-    mock_asr_engine.compute_type = "int8"
+    mock_asr_engine.model = "whisper-large-v3"
 
     mock_llm_service = MagicMock()
     mock_llm_service.is_enabled = False
@@ -92,7 +91,7 @@ async def test_voice_handler_success(mock_message, mock_asr_engine):
         args, _kwargs = calls[-1]
         text_sent = args[0]
         assert "```\n转写文本\n```" in text_sent
-        assert "🎙️ 由 Whisper 模型" in text_sent
+        assert "🎙️ 由模型 whisper-large-v3 转录" in text_sent
 
 
 @pytest.mark.asyncio
@@ -105,8 +104,7 @@ async def test_voice_handler_with_llm(mock_message, mock_asr_engine):
     mock_bot.download_file = AsyncMock()
 
     mock_asr_engine.transcribe = AsyncMock(return_value="Raw Text")
-    mock_asr_engine.model_size = "large-v2"
-    mock_asr_engine.compute_type = "int8"
+    mock_asr_engine.model = "whisper-large-v3"
 
     mock_llm_service = MagicMock()
     mock_llm_service.is_enabled = True
@@ -161,8 +159,7 @@ async def test_voice_handler_sends_file_when_text_too_long(monkeypatch, mock_mes
 
     long_text = "长" * 200
     mock_asr_engine.transcribe = AsyncMock(return_value=long_text)
-    mock_asr_engine.model_size = "large-v2"
-    mock_asr_engine.compute_type = "int8"
+    mock_asr_engine.model = "whisper-large-v3"
 
     mock_llm_service = MagicMock()
     mock_llm_service.is_enabled = False
@@ -201,8 +198,7 @@ async def test_voice_handler_llm_result_too_long(monkeypatch, mock_message, mock
     mock_bot.download_file = AsyncMock()
 
     mock_asr_engine.transcribe = AsyncMock(return_value="raw")
-    mock_asr_engine.model_size = "large-v2"
-    mock_asr_engine.compute_type = "int8"
+    mock_asr_engine.model = "whisper-large-v3"
 
     mock_llm_service = MagicMock()
     mock_llm_service.is_enabled = True

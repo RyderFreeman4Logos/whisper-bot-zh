@@ -16,6 +16,9 @@ class LLMService:
         self.models = [m.strip() for m in raw_model_config.split(",") if m.strip()]
 
         self.system_prompt = settings.LLM_SYSTEM_PROMPT
+        self.temperature = settings.LLM_TEMPERATURE
+        self.top_p = settings.LLM_TOP_P
+        self.max_tokens = settings.LLM_MAX_TOKENS
 
         # Map custom config keys to standard env vars expected by libraries/litellm
         self._map_env_var(settings.ANTHROPIC_API, "ANTHROPIC_API_KEY")
@@ -45,14 +48,31 @@ class LLMService:
         start_time = time.time()
         last_error = None
 
+        user_content = (
+            "润色下面这段转写。严禁添加评论/建议/总结/补充，"
+            "严禁改写原意，严禁替说话人补全没说完的话。直接输出润色后的文本：\n\n"
+            f"{text}"
+        )
+
+        call_kwargs: dict[str, object] = {
+            "temperature": self.temperature,
+            "num_retries": 3,  # Automatic exponential backoff for temporary errors
+        }
+        if self.top_p is not None:
+            call_kwargs["top_p"] = self.top_p
+        if self.max_tokens is not None:
+            call_kwargs["max_tokens"] = self.max_tokens
+
         for model in self.models:
             logger.info(f"Sending text to LLM ({model}) for refinement...")
             try:
                 response = await acompletion(
                     model=model,
-                    messages=[{"role": "system", "content": self.system_prompt}, {"role": "user", "content": text}],
-                    temperature=0.3,  # Low temperature for fidelity
-                    num_retries=3,  # Automatic exponential backoff for temporary errors
+                    messages=[
+                        {"role": "system", "content": self.system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    **call_kwargs,
                 )
 
                 refined_content = response.choices[0].message.content
