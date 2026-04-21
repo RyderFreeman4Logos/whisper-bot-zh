@@ -66,7 +66,17 @@ async fn load_users(path: &Path) -> Result<BTreeSet<u64>> {
         }
     };
 
-    parse_users(&raw).with_context(|| format!("failed to parse auth file {}", path.display()))
+    match parse_users(&raw) {
+        Ok(users) => Ok(users),
+        Err(error) => {
+            tracing::warn!(
+                path = %path.display(),
+                error = %error,
+                "failed to parse auth file; starting with empty allowlist"
+            );
+            Ok(BTreeSet::new())
+        }
+    }
 }
 
 fn parse_users(raw: &str) -> Result<BTreeSet<u64>> {

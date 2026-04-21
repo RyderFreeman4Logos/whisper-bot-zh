@@ -14,16 +14,14 @@ async fn missing_auth_file_starts_with_empty_user_set() -> Result<()> {
 }
 
 #[tokio::test]
-async fn corrupt_auth_file_fails_service_construction() -> Result<()> {
+async fn corrupt_auth_file_starts_with_empty_user_set() -> Result<()> {
     let temp_dir = tempdir()?;
     let storage_path = temp_dir.path().join("allowed_users.json");
     tokio::fs::write(&storage_path, b"{not-json").await?;
 
-    let Err(error) = AuthService::from_parts(storage_path, "secret".to_owned()).await else {
-        panic!("corrupt auth file should fail");
-    };
+    let service = AuthService::from_parts(storage_path, "secret".to_owned()).await?;
 
-    assert!(error.to_string().contains("failed to parse auth file"));
+    assert!(!service.is_user_allowed(42).await);
     Ok(())
 }
 

@@ -67,3 +67,42 @@ fn rejects_missing_home_when_default_paths_are_needed() {
         "HOME is required to resolve default data dir; pass --env-file and --data-dir explicitly if running without HOME"
     );
 }
+
+#[test]
+fn env_only_runs_without_home_when_explicit_data_dir_set() {
+    let temp_dir = tempdir().expect("temp dir");
+    let data_dir = temp_dir.path().join("data");
+    let cache_dir = temp_dir.path().join("cache");
+    let _env = EnvGuard::set(&[
+        ("HOME", None),
+        ("BOT_TOKEN", Some("test-token")),
+        ("ACCESS_PASSWORD", Some("test-password")),
+        ("DATA_DIR", Some(data_dir.to_str().expect("utf-8 path"))),
+        ("CACHE_DIR", Some(cache_dir.to_str().expect("utf-8 path"))),
+    ]);
+
+    let settings = Settings::load(None, None).expect("explicit env paths should bypass HOME");
+
+    assert_eq!(settings.data_dir, data_dir);
+    assert_eq!(settings.cache_dir, cache_dir);
+}
+
+#[test]
+fn cli_data_dir_bypasses_home() {
+    let temp_dir = tempdir().expect("temp dir");
+    let cli_data_dir = temp_dir.path().join("data");
+    let cache_dir = temp_dir.path().join("cache");
+    let _env = EnvGuard::set(&[
+        ("HOME", None),
+        ("BOT_TOKEN", Some("test-token")),
+        ("ACCESS_PASSWORD", Some("test-password")),
+        ("DATA_DIR", None),
+        ("CACHE_DIR", Some(cache_dir.to_str().expect("utf-8 path"))),
+    ]);
+
+    let settings = Settings::load(None, Some(cli_data_dir.as_path()))
+        .expect("cli data dir should bypass HOME");
+
+    assert_eq!(settings.data_dir, cli_data_dir);
+    assert_eq!(settings.cache_dir, cache_dir);
+}

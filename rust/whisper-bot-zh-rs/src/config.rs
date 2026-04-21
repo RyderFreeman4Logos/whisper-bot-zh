@@ -48,18 +48,18 @@ pub struct Settings {
 
 impl Settings {
     pub fn load(cli_env_file: Option<&Path>, cli_data_dir: Option<&Path>) -> Result<Self> {
-        let env_file_path = if let Some(path) = cli_env_file {
-            Some(path.to_path_buf())
-        } else {
-            let xdg = default_data_dir()?.join(".env");
-            xdg.exists().then_some(xdg)
-        };
         let data_dir = match cli_data_dir
             .map(Path::to_path_buf)
             .or_else(|| optional("DATA_DIR").map(PathBuf::from))
         {
             Some(path) => path,
             None => default_data_dir()?,
+        };
+        let env_file_path = if let Some(path) = cli_env_file {
+            Some(path.to_path_buf())
+        } else {
+            let candidate = data_dir.join(".env");
+            candidate.exists().then_some(candidate)
         };
         let cache_dir = match optional("CACHE_DIR") {
             Some(path) => PathBuf::from(path),
