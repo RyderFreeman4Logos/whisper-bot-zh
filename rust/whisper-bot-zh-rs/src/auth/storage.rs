@@ -42,11 +42,12 @@ impl AuthService {
 
         let _save_guard = self.save_gate.lock().await;
         let snapshot = {
-            let mut guard = self.allowed_users.write().await;
-            guard.insert(user_id);
-            guard.iter().copied().collect::<Vec<_>>()
+            let mut snapshot = self.allowed_users.read().await.clone();
+            snapshot.insert(user_id);
+            snapshot
         };
         persist_users(self.storage_path.as_path(), &snapshot).await?;
+        *self.allowed_users.write().await = snapshot;
         Ok(true)
     }
 
@@ -56,20 +57,16 @@ impl AuthService {
 }
 
 async fn load_users(path: &Path) -> Result<BTreeSet<u64>> {
-    match tokio::fs::read_to_string(path).await {
-        Ok(raw) => match parse_users(&raw) {
-            Ok(users) => Ok(users),
-            Err(error) => {
-                tracing::error!(path = %path.display(), %error, "failed to parse auth file");
-                Ok(BTreeSet::new())
-            }
-        },
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(BTreeSet::new()),
+    let raw = match tokio::fs::read_to_string(path).await {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeSet::new()),
         Err(error) => {
-            tracing::error!(path = %path.display(), %error, "failed to read auth file");
-            Ok(BTreeSet::new())
+            return Err(error)
+                .with_context(|| format!("failed to read auth file {}", path.display()));
         }
-    }
+    };
+
+    parse_users(&raw).with_context(|| format!("failed to parse auth file {}", path.display()))
 }
 
 fn parse_users(raw: &str) -> Result<BTreeSet<u64>> {
@@ -77,14 +74,15 @@ fn parse_users(raw: &str) -> Result<BTreeSet<u64>> {
     Ok(parsed.into_iter().collect())
 }
 
-async fn persist_users(path: &Path, user_ids: &[u64]) -> Result<()> {
+async fn persist_users(path: &Path, user_ids: &BTreeSet<u64>) -> Result<()> {
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
             .await
             .with_context(|| format!("failed to create auth directory {}", parent.display()))?;
     }
 
-    let payload = serde_json::to_vec_pretty(user_ids).context("failed to serialize auth file")?;
+    let payload = serde_json::to_vec_pretty(&user_ids.iter().copied().collect::<Vec<_>>())
+        .context("failed to serialize auth file")?;
     let temp_path = pending_auth_path(path);
     #[cfg(test)]
     maybe_delay_persist_for_tests(user_ids.len()).await;

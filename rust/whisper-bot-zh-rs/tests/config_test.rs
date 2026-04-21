@@ -49,3 +49,21 @@ fn rejects_non_positive_timeout_values() {
 
     assert!(error.to_string().contains("LLM_CLOUD_TIMEOUT_SEC"));
 }
+
+#[test]
+fn rejects_missing_home_when_default_paths_are_needed() {
+    let _env = EnvGuard::set(&[
+        ("HOME", None),
+        ("BOT_TOKEN", Some("test-token")),
+        ("ACCESS_PASSWORD", Some("test-password")),
+        ("DATA_DIR", None),
+        ("CACHE_DIR", None),
+    ]);
+
+    let error = Settings::load(None, None).expect_err("missing HOME should fail");
+
+    assert_eq!(
+        error.to_string(),
+        "HOME is required to resolve default data dir; pass --env-file and --data-dir explicitly if running without HOME"
+    );
+}

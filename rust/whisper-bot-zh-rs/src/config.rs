@@ -48,12 +48,25 @@ pub struct Settings {
 
 impl Settings {
     pub fn load(cli_env_file: Option<&Path>, cli_data_dir: Option<&Path>) -> Result<Self> {
-        let env_file_path = cli_env_file.map(Path::to_path_buf).or_else(|| {
-            let xdg = default_data_dir().join(".env");
+        let env_file_path = if let Some(path) = cli_env_file {
+            Some(path.to_path_buf())
+        } else {
+            let xdg = default_data_dir()?.join(".env");
             xdg.exists().then_some(xdg)
-        });
+        };
+        let data_dir = match cli_data_dir
+            .map(Path::to_path_buf)
+            .or_else(|| optional("DATA_DIR").map(PathBuf::from))
+        {
+            Some(path) => path,
+            None => default_data_dir()?,
+        };
+        let cache_dir = match optional("CACHE_DIR") {
+            Some(path) => PathBuf::from(path),
+            None => default_cache_dir()?,
+        };
 
-        if let Some(path) = env_file_path.as_deref() {
+        if let Some(path) = env_file_path.as_ref() {
             // Override: .env wins over inherited shell env — the Python version
             // documented this after stale shell GROQ_API_KEY shadowed the fresh
             // value in ~/.config/whisper-bot-zh/.env.
@@ -95,11 +108,8 @@ impl Settings {
             zenmux_url: optional("ZENMUX_URL"),
             openai_api_key: optional("OPENAI_API_KEY"),
             proxy_url: optional("PROXY_URL"),
-            data_dir: cli_data_dir
-                .map(Path::to_path_buf)
-                .or_else(|| optional("DATA_DIR").map(PathBuf::from))
-                .unwrap_or_else(default_data_dir),
-            cache_dir: optional("CACHE_DIR").map_or_else(default_cache_dir, PathBuf::from),
+            data_dir,
+            cache_dir,
         };
 
         settings.validate()?;
