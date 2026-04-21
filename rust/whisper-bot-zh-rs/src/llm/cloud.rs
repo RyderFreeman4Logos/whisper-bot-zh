@@ -31,6 +31,14 @@ impl CloudRefiner {
         Ok(Some(Self::new(models)))
     }
 
+    #[must_use]
+    pub fn display_model(&self) -> String {
+        self.models
+            .first()
+            .map(|m| m.model().to_owned())
+            .unwrap_or_default()
+    }
+
     pub async fn refine(&self, transcript: &str) -> Result<RefinementResult> {
         let mut last_error = None;
 

@@ -45,6 +45,11 @@ impl LocalRefiner {
         ))))
     }
 
+    #[must_use]
+    pub fn model_name(&self) -> &str {
+        self.inner.model()
+    }
+
     pub async fn refine(&self, transcript: &str) -> Result<RefinementResult> {
         self.inner.refine(transcript).await
     }

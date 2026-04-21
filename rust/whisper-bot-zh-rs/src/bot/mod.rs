@@ -68,14 +68,18 @@ async fn dispatch_message(
     }
 
     if message.voice().is_some() || message.audio().is_some() {
-        return Box::pin(voice::handle_audio(
-            &bot,
-            &message,
-            asr.as_ref(),
-            llm.as_ref(),
-            auth.as_ref(),
-        ))
-        .await;
+        // Detach the voice handler so the dispatcher can keep receiving
+        // subsequent messages while a slow local LLM is still refining.
+        // Without this, a 1800s local-timeout on one voice silently blocks
+        // every later voice on the same chat.
+        tokio::spawn(async move {
+            if let Err(error) =
+                voice::handle_audio(&bot, &message, asr.as_ref(), llm.as_ref(), auth.as_ref()).await
+            {
+                tracing::error!(%error, "voice handler task failed");
+            }
+        });
+        return Ok(());
     }
 
     Ok(())

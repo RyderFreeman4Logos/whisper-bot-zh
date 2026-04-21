@@ -59,6 +59,16 @@ impl LlmService {
         self.has_cloud() || self.has_local()
     }
 
+    #[must_use]
+    pub fn cloud_display_model(&self) -> Option<String> {
+        self.cloud.as_ref().map(CloudRefiner::display_model)
+    }
+
+    #[must_use]
+    pub fn local_display_model(&self) -> Option<String> {
+        self.local.as_ref().map(|l| l.model_name().to_owned())
+    }
+
     pub async fn refine_cloud(&self, text: &str) -> Result<RefinementResult> {
         let cloud = self
             .cloud

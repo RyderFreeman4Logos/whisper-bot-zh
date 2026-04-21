@@ -43,12 +43,9 @@ pub fn dual_refinement_reply(
     local: Option<&RefinementResult>,
 ) -> RenderedReply {
     let sections = [
-        cloud.map(|result| section("☁️ 云端", result)),
-        local.map(|result| section("💻 本地", result)),
-    ]
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>();
+        section_with_state("☁️ 云端", cloud),
+        section_with_state("💻 本地", local),
+    ];
 
     let plain = sections
         .iter()
@@ -135,14 +132,20 @@ fn single_block_reply(content: &str, footer: String, file_name: &'static str) ->
     }
 }
 
-fn section(label: &str, result: &RefinementResult) -> RenderSection {
-    RenderSection {
-        header: format!(
-            "{label} · {} · {}",
-            result.model,
-            format_duration(result.duration)
-        ),
-        body: result.text.clone(),
+fn section_with_state(label: &str, result: Option<&RefinementResult>) -> RenderSection {
+    match result {
+        None => RenderSection {
+            header: format!("⏳ {label}"),
+            body: "(正在校对...)".to_owned(),
+        },
+        Some(r) if r.ok => RenderSection {
+            header: format!("✅ {label} · {} · {}", r.model, format_duration(r.duration)),
+            body: r.text.clone(),
+        },
+        Some(r) => RenderSection {
+            header: format!("⚠️ {label} · {}", r.model),
+            body: r.text.clone(),
+        },
     }
 }
 
