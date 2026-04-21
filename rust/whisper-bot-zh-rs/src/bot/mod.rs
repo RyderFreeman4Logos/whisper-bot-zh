@@ -88,18 +88,32 @@ async fn dispatch_message(
     }
 
     if message.voice().is_some() || message.audio().is_some() {
+        // Acquire before spawn so the limiter bounds queued voice work too,
+        // not just concurrently running handlers.
+        let voice_permit = match deps.voice_limiter.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(tokio::sync::TryAcquireError::NoPermits) => {
+                tracing::info!(chat_id = %message.chat.id, "voice handler limiter saturated");
+                if let Err(error) = deps
+                    .governor
+                    .send_message(message.chat.id, "⏳ 当前任务较多，请稍后再试")
+                    .await
+                {
+                    tracing::warn!(%error, "failed to send voice busy reply");
+                }
+                return Ok(());
+            }
+            Err(tokio::sync::TryAcquireError::Closed) => {
+                tracing::warn!("voice handler semaphore closed");
+                return Ok(());
+            }
+        };
+
         // Detach the voice handler so the dispatcher can keep receiving
         // subsequent messages while a slow local LLM is still refining.
         // Without this, a 1800s local-timeout on one voice silently blocks
         // every later voice on the same chat.
         tokio::spawn(async move {
-            let voice_permit = match deps.voice_limiter.clone().acquire_owned().await {
-                Ok(permit) => permit,
-                Err(error) => {
-                    tracing::error!(%error, "voice handler semaphore closed");
-                    return;
-                }
-            };
             if let Err(error) = voice::handle_audio(
                 &bot,
                 deps.governor.as_ref(),
