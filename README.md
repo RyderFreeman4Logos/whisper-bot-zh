@@ -60,6 +60,10 @@ uv run python -m whisper_bot.main
 
 要求：Python 3.10+、FFmpeg 已装在 PATH。
 
+上面这组 `cp .env.example .env` / `uv run python -m whisper_bot.main` 是 Python 源码开发流程。
+Rust CLI / `cargo run` 不会默认读取项目根目录 `.env`；Rust 运行时只会读取
+`~/.config/whisper-bot-zh/.env`，或显式传入 `--env-file /path/to/.env`。
+
 ## ⚙️ 配置
 
 ### 基础
@@ -73,7 +77,7 @@ ACCESS_PASSWORD=MyStrongPassword123
 
 ```ini
 ASR_BASE_URL=https://api.groq.com/openai/v1
-ASR_API_KEY=gsk_...          # 可留空，回落到 GROQ_API_KEY
+ASR_API_KEY=gsk_...          # 可留空，回落到 GROQ_API_KEY / OPENAI_API_KEY
 ASR_MODEL=whisper-large-v3
 ASR_LANGUAGE=zh
 ASR_PROMPT=以下是一段简体中文内容:
@@ -94,6 +98,11 @@ ASR_MODEL=whisper-large-v3
 LLM_MODEL=groq/llama-3.3-70b-versatile,groq/llama-3.1-8b-instant,gemini/gemini-2.0-flash-exp
 GROQ_API=gsk_...
 GEMINI_API=AIza...
+ANTHROPIC_API_KEY=sk-ant-...
+DEEPSEEK_API=sk-...
+XAI_API=xai-...
+# ZENMUX_URL=https://your-zenmux.example/v1
+# ZENMUX_API=...
 
 # 调优旋钮
 LLM_TEMPERATURE=0.2   # 越低越保真

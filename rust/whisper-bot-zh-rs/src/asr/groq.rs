@@ -30,7 +30,7 @@ impl AsrService {
         let api_key = settings
             .asr_effective_api_key()
             .map(ToOwned::to_owned)
-            .context("ASR_API_KEY or GROQ_API must be configured")?;
+            .context("ASR_API_KEY, GROQ_API, GROQ_API_KEY, or OPENAI_API_KEY must be configured")?;
 
         Ok(Self::from_parts(
             reqwest::Client::new(),

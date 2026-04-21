@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+#[path = "support/llm.rs"]
 mod support;
 
 use serde_json::json;

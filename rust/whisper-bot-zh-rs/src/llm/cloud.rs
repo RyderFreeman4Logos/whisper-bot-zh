@@ -1,7 +1,8 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 
 use crate::config::Settings;
 
+use super::provider::resolve_model;
 use super::{ChatRefiner, RefinementResult};
 
 #[derive(Clone)]
@@ -47,35 +48,14 @@ impl CloudRefiner {
 }
 
 fn build_model_client(settings: &Settings, configured_model: &str) -> Result<ChatRefiner> {
-    let (provider, model_name) = configured_model
-        .split_once('/')
-        .map_or(("groq", configured_model), |(provider, model)| {
-            (provider, model)
-        });
-
-    let (base_url, api_key) = match provider {
-        "groq" => (
-            "https://api.groq.com/openai/v1",
-            settings
-                .groq_api
-                .clone()
-                .context("GROQ_API must be set for groq/ cloud models")?,
-        ),
-        "gemini" => (
-            "https://generativelanguage.googleapis.com/v1beta/openai",
-            settings
-                .gemini_api
-                .clone()
-                .context("GEMINI_API must be set for gemini/ cloud models")?,
-        ),
-        unsupported => bail!("unsupported cloud provider prefix: {unsupported}"),
-    };
+    let resolved = resolve_model(settings, configured_model)
+        .with_context(|| format!("failed to configure cloud model `{configured_model}`"))?;
 
     Ok(ChatRefiner::new(
         reqwest::Client::new(),
-        base_url,
-        api_key,
-        model_name,
+        &resolved.base_url,
+        resolved.api_key,
+        &resolved.model_name,
         settings.cloud_timeout(),
         settings.heartbeat_interval(),
         settings.llm_temperature,

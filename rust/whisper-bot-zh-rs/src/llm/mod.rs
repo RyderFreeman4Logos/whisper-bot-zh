@@ -5,6 +5,7 @@ pub mod heartbeat;
 pub mod local;
 mod openai;
 pub mod prompt;
+mod provider;
 
 use std::time::Duration;
 

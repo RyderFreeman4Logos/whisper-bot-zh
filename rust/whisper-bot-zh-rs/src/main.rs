@@ -17,14 +17,18 @@ struct Cli {
     /// Path to .env file. Overrides the XDG default `~/.config/whisper-bot-zh/.env`.
     #[arg(long, env = "WHISPER_BOT_ENV_FILE")]
     env_file: Option<PathBuf>,
+
+    /// Data directory. Overrides `DATA_DIR` and the XDG default `~/.config/whisper-bot-zh`.
+    #[arg(long)]
+    data_dir: Option<PathBuf>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let settings =
-        Settings::load(cli.env_file.as_deref()).context("failed to load configuration")?;
+    let settings = Settings::load(cli.env_file.as_deref(), cli.data_dir.as_deref())
+        .context("failed to load configuration")?;
 
     init_tracing(&settings.log_level);
 

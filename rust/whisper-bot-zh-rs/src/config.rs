@@ -2,6 +2,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
+#[path = "config/paths.rs"]
+mod paths;
+use paths::{default_cache_dir, default_data_dir};
 
 #[derive(Debug, Clone)]
 pub struct Settings {
@@ -9,7 +12,6 @@ pub struct Settings {
     pub access_password: String,
     pub max_concurrent_tasks: usize,
     pub log_level: String,
-
     pub asr_base_url: String,
     pub asr_api_key: Option<String>,
     pub asr_model: String,
@@ -21,7 +23,6 @@ pub struct Settings {
     pub llm_temperature: f32,
     pub llm_top_p: Option<f32>,
     pub llm_max_tokens: Option<u32>,
-
     pub llm_local_base_url: Option<String>,
     pub llm_local_api_key: Option<String>,
     pub llm_local_model: Option<String>,
@@ -32,13 +33,19 @@ pub struct Settings {
 
     pub groq_api: Option<String>,
     pub gemini_api: Option<String>,
+    pub anthropic_api_key: Option<String>,
+    pub deepseek_api: Option<String>,
+    pub xai_api: Option<String>,
+    pub zenmux_api: Option<String>,
+    pub zenmux_url: Option<String>,
+    pub openai_api_key: Option<String>,
 
     pub data_dir: PathBuf,
     pub cache_dir: PathBuf,
 }
 
 impl Settings {
-    pub fn load(cli_env_file: Option<&Path>) -> Result<Self> {
+    pub fn load(cli_env_file: Option<&Path>, cli_data_dir: Option<&Path>) -> Result<Self> {
         let env_file_path = cli_env_file.map(Path::to_path_buf).or_else(|| {
             let xdg = default_data_dir().join(".env");
             xdg.exists().then_some(xdg)
@@ -57,7 +64,6 @@ impl Settings {
             access_password: required("ACCESS_PASSWORD")?,
             max_concurrent_tasks: optional_parsed("MAX_CONCURRENT_TASKS")?.unwrap_or(1),
             log_level: optional("LOG_LEVEL").unwrap_or_else(|| "info".into()),
-
             asr_base_url: optional("ASR_BASE_URL")
                 .unwrap_or_else(|| "https://api.groq.com/openai/v1".into()),
             asr_api_key: optional("ASR_API_KEY"),
@@ -71,20 +77,24 @@ impl Settings {
             llm_temperature: optional_parsed("LLM_TEMPERATURE")?.unwrap_or(0.2),
             llm_top_p: optional_parsed("LLM_TOP_P")?,
             llm_max_tokens: optional_parsed("LLM_MAX_TOKENS")?,
-
             llm_local_base_url: optional("LLM_LOCAL_BASE_URL"),
             llm_local_api_key: optional("LLM_LOCAL_API_KEY"),
             llm_local_model: optional("LLM_LOCAL_MODEL"),
-
             llm_cloud_timeout_sec: optional_parsed("LLM_CLOUD_TIMEOUT_SEC")?.unwrap_or(120.0),
             llm_local_timeout_sec: optional_parsed("LLM_LOCAL_TIMEOUT_SEC")?.unwrap_or(1800.0),
-            llm_heartbeat_interval_sec: optional_parsed("LLM_HEARTBEAT_INTERVAL_SEC")?
-                .unwrap_or(20.0),
-
+            llm_heartbeat_interval_sec: optional_parsed("LLM_HEARTBEAT_INTERVAL_SEC")?.unwrap_or(20.0),
             groq_api: optional("GROQ_API").or_else(|| optional("GROQ_API_KEY")),
             gemini_api: optional("GEMINI_API"),
-
-            data_dir: optional("DATA_DIR").map_or_else(default_data_dir, PathBuf::from),
+            anthropic_api_key: optional("ANTHROPIC_API_KEY").or_else(|| optional("ANTHROPIC_API")),
+            deepseek_api: optional("DEEPSEEK_API").or_else(|| optional("DEEPSEEK_API_KEY")),
+            xai_api: optional("XAI_API").or_else(|| optional("XAI_API_KEY")),
+            zenmux_api: optional("ZENMUX_API"),
+            zenmux_url: optional("ZENMUX_URL"),
+            openai_api_key: optional("OPENAI_API_KEY"),
+            data_dir: cli_data_dir
+                .map(Path::to_path_buf)
+                .or_else(|| optional("DATA_DIR").map(PathBuf::from))
+                .unwrap_or_else(default_data_dir),
             cache_dir: optional("CACHE_DIR").map_or_else(default_cache_dir, PathBuf::from),
         };
 
@@ -145,7 +155,10 @@ impl Settings {
 
     #[must_use]
     pub fn asr_effective_api_key(&self) -> Option<&str> {
-        self.asr_api_key.as_deref().or(self.groq_api.as_deref())
+        self.asr_api_key
+            .as_deref()
+            .or(self.groq_api.as_deref())
+            .or(self.openai_api_key.as_deref())
     }
 
     #[must_use]
@@ -184,16 +197,4 @@ where
             .map_err(|e| anyhow!("{key}={s:?} parse error: {e}")),
         None => Ok(None),
     }
-}
-
-fn default_data_dir() -> PathBuf {
-    home_dir().join(".config").join("whisper-bot-zh")
-}
-
-fn default_cache_dir() -> PathBuf {
-    home_dir().join(".cache").join("whisper-bot-zh")
-}
-
-fn home_dir() -> PathBuf {
-    std::env::var_os("HOME").map_or_else(|| PathBuf::from("/tmp"), PathBuf::from)
 }
