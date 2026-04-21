@@ -1,12 +1,15 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
+#[path = "config/env.rs"]
+mod env;
 #[path = "config/http.rs"]
 mod http;
 #[path = "config/paths.rs"]
 mod paths;
 #[path = "config/timeouts.rs"]
 mod timeouts;
+use env::{optional, optional_parsed, required, resolve_env_file_path};
 use paths::{default_cache_dir, default_data_dir};
 
 #[derive(Debug, Clone)]
@@ -48,23 +51,7 @@ pub struct Settings {
 
 impl Settings {
     pub fn load(cli_env_file: Option<&Path>, cli_data_dir: Option<&Path>) -> Result<Self> {
-        let data_dir = match cli_data_dir
-            .map(Path::to_path_buf)
-            .or_else(|| optional("DATA_DIR").map(PathBuf::from))
-        {
-            Some(path) => path,
-            None => default_data_dir()?,
-        };
-        let env_file_path = if let Some(path) = cli_env_file {
-            Some(path.to_path_buf())
-        } else {
-            let candidate = data_dir.join(".env");
-            candidate.exists().then_some(candidate)
-        };
-        let cache_dir = match optional("CACHE_DIR") {
-            Some(path) => PathBuf::from(path),
-            None => default_cache_dir()?,
-        };
+        let env_file_path = resolve_env_file_path(cli_env_file, cli_data_dir)?;
 
         if let Some(path) = env_file_path.as_ref() {
             // Override: .env wins over inherited shell env — the Python version
@@ -74,6 +61,17 @@ impl Settings {
                 .with_context(|| format!("loading env file {}", path.display()))?;
         }
 
+        let data_dir = match cli_data_dir
+            .map(Path::to_path_buf)
+            .or_else(|| optional("DATA_DIR").map(PathBuf::from))
+        {
+            Some(path) => path,
+            None => default_data_dir()?,
+        };
+        let cache_dir = match optional("CACHE_DIR") {
+            Some(path) => PathBuf::from(path),
+            None => default_cache_dir()?,
+        };
         let settings = Self {
             bot_token: required("BOT_TOKEN")?,
             access_password: required("ACCESS_PASSWORD")?,
@@ -174,27 +172,5 @@ impl Settings {
         } else {
             "******".into()
         }
-    }
-}
-
-fn required(key: &str) -> Result<String> {
-    std::env::var(key).with_context(|| format!("{key} must be set in environment"))
-}
-
-fn optional(key: &str) -> Option<String> {
-    std::env::var(key).ok().filter(|s| !s.is_empty())
-}
-
-fn optional_parsed<T>(key: &str) -> Result<Option<T>>
-where
-    T: std::str::FromStr,
-    T::Err: std::fmt::Display,
-{
-    match optional(key) {
-        Some(s) => s
-            .parse::<T>()
-            .map(Some)
-            .map_err(|e| anyhow!("{key}={s:?} parse error: {e}")),
-        None => Ok(None),
     }
 }

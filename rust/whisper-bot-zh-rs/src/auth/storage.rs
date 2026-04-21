@@ -1,8 +1,10 @@
 use std::collections::BTreeSet;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::config::Settings;
@@ -68,14 +70,7 @@ async fn load_users(path: &Path) -> Result<BTreeSet<u64>> {
 
     match parse_users(&raw) {
         Ok(users) => Ok(users),
-        Err(error) => {
-            tracing::warn!(
-                path = %path.display(),
-                error = %error,
-                "failed to parse auth file; starting with empty allowlist"
-            );
-            Ok(BTreeSet::new())
-        }
+        Err(error) => preserve_corrupt_auth_file(path, error).await,
     }
 }
 
@@ -109,6 +104,40 @@ async fn persist_users(path: &Path, user_ids: &BTreeSet<u64>) -> Result<()> {
 
 fn pending_auth_path(path: &Path) -> PathBuf {
     path.with_extension("tmp")
+}
+
+async fn preserve_corrupt_auth_file(path: &Path, error: anyhow::Error) -> Result<BTreeSet<u64>> {
+    let preserved_path = corrupted_auth_path(path)?;
+    tokio::fs::rename(path, &preserved_path)
+        .await
+        .with_context(|| {
+            format!(
+                "failed to preserve corrupt auth file {} as {} after parse error: {error}",
+                path.display(),
+                preserved_path.display()
+            )
+        })?;
+
+    tracing::warn!(
+        path = %path.display(),
+        preserved_path = %preserved_path.display(),
+        error = %error,
+        "failed to parse auth file; preserved corrupt file and starting with empty allowlist"
+    );
+    Ok(BTreeSet::new())
+}
+
+fn corrupted_auth_path(path: &Path) -> Result<PathBuf> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before Unix epoch")?
+        .as_secs();
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| anyhow!("auth path {} has no file name", path.display()))?;
+    let mut preserved_name = OsString::from(file_name);
+    preserved_name.push(format!(".corrupted.{timestamp}"));
+    Ok(path.with_file_name(preserved_name))
 }
 
 #[cfg(test)]

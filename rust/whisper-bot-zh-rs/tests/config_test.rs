@@ -31,6 +31,35 @@ fn cli_data_dir_overrides_env_file_data_dir() {
 }
 
 #[test]
+fn data_dir_from_env_file_is_used() {
+    let _env = EnvGuard::set(&[
+        ("HOME", None),
+        ("BOT_TOKEN", None),
+        ("ACCESS_PASSWORD", None),
+        ("DATA_DIR", None),
+        ("CACHE_DIR", None),
+    ]);
+    let temp_dir = tempdir().expect("temp dir");
+    let data_dir = temp_dir.path().join("env-data");
+    let cache_dir = temp_dir.path().join("env-cache");
+    let env_file = temp_dir.path().join("bot.env");
+    fs::write(
+        &env_file,
+        format!(
+            "BOT_TOKEN=x\nACCESS_PASSWORD=y\nDATA_DIR={}\nCACHE_DIR={}\n",
+            data_dir.display(),
+            cache_dir.display()
+        ),
+    )
+    .expect("write env file");
+
+    let settings = Settings::load(Some(&env_file), None).expect("load settings");
+
+    assert_eq!(settings.data_dir, data_dir);
+    assert_eq!(settings.cache_dir, cache_dir);
+}
+
+#[test]
 fn rejects_non_positive_timeout_values() {
     let _env = EnvGuard::set(&[
         ("BOT_TOKEN", None),
