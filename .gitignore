@@ -23,5 +23,24 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-GEMINI.md
 *.zh.md
+
+# AI agent tooling (synced with ~/.gitignore_noai + project-local)
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.agents/
+.claude/
+.codex/
+.gemini/
+.csa/
+.csa-review-output
+.weave/
+weave.lock
+.aider*
+.letta/
+drafts/
+patterns/
+review_report/
+result.toml
+strix_runs/

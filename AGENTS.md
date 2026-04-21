@@ -1,1 +1,0 @@
-/home/ad/s/llm/system_prompt.py.md
