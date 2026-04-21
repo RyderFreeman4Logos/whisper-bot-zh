@@ -76,7 +76,7 @@ pub fn dual_refinement_reply(
 }
 
 pub async fn deliver(bot: &Bot, target: &Message, reply: RenderedReply) -> ResponseResult<()> {
-    if should_send_as_file(&reply.plain) {
+    if reply.wants_file() {
         edit_plain_text(bot, target, "文本较长，已作为文件发送。").await?;
         bot.send_document(
             target.chat.id,
@@ -89,6 +89,17 @@ pub async fn deliver(bot: &Bot, target: &Message, reply: RenderedReply) -> Respo
 
     edit_html_text(bot, target, reply.html).await?;
     Ok(())
+}
+
+pub async fn update_status(bot: &Bot, target: &Message, text: &str) -> ResponseResult<()> {
+    edit_plain_text(bot, target, text).await
+}
+
+impl RenderedReply {
+    #[must_use]
+    pub fn wants_file(&self) -> bool {
+        should_send_as_file(&self.plain)
+    }
 }
 
 async fn edit_plain_text(bot: &Bot, target: &Message, text: &str) -> ResponseResult<()> {

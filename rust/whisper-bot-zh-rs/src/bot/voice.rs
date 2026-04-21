@@ -108,15 +108,29 @@ async fn handle_audio_inner(
 
     if llm.has_cloud() && llm.has_local() {
         let mut updates = flow::dual::collect(llm.clone(), transcript.clone());
+        let mut deferred_long_file_notice_sent = false;
         while let Some(snapshot) = updates.recv().await {
             let snapshot = snapshot?;
-            render::deliver(
-                bot,
-                &refinement_message,
-                render::dual_refinement_reply(snapshot.cloud.as_ref(), snapshot.local.as_ref()),
-            )
-            .await
-            .context("failed to deliver dual refinement progress")?;
+            let reply =
+                render::dual_refinement_reply(snapshot.cloud.as_ref(), snapshot.local.as_ref());
+
+            if should_defer_dual_file_delivery(&snapshot, &reply) {
+                if !deferred_long_file_notice_sent {
+                    render::update_status(
+                        bot,
+                        &refinement_message,
+                        "📝 文本较长，等待双模型完成后发送最终文件...",
+                    )
+                    .await
+                    .context("failed to update deferred dual-file status")?;
+                    deferred_long_file_notice_sent = true;
+                }
+                continue;
+            }
+
+            render::deliver(bot, &refinement_message, reply)
+                .await
+                .context("failed to deliver dual refinement progress")?;
         }
     } else {
         let result = flow::single::collect(llm, &transcript).await?;
@@ -138,4 +152,65 @@ async fn download_audio(bot: &Bot, path: &str) -> Result<Bytes> {
         .await
         .context("failed to download Telegram audio")?;
     Ok(Bytes::from(chunks.concat()))
+}
+
+fn should_defer_dual_file_delivery(
+    snapshot: &flow::DualProgress,
+    reply: &render::RenderedReply,
+) -> bool {
+    !snapshot.is_complete() && reply.wants_file()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::llm::RefinementResult;
+
+    use super::should_defer_dual_file_delivery;
+    use crate::bot::{flow::DualProgress, render};
+
+    fn result(model: &str, text: String) -> RefinementResult {
+        RefinementResult {
+            ok: true,
+            text,
+            duration: Duration::from_secs(1),
+            model: model.to_owned(),
+        }
+    }
+
+    #[test]
+    fn defers_partial_dual_updates_that_would_send_files() {
+        let long_text = "中".repeat(4_100);
+        let snapshot = DualProgress {
+            cloud: Some(result("cloud", long_text.clone())),
+            local: None,
+        };
+        let reply = render::dual_refinement_reply(snapshot.cloud.as_ref(), snapshot.local.as_ref());
+
+        assert!(should_defer_dual_file_delivery(&snapshot, &reply));
+    }
+
+    #[test]
+    fn allows_final_dual_updates_to_send_files() {
+        let long_text = "中".repeat(4_100);
+        let snapshot = DualProgress {
+            cloud: Some(result("cloud", long_text.clone())),
+            local: Some(result("local", long_text)),
+        };
+        let reply = render::dual_refinement_reply(snapshot.cloud.as_ref(), snapshot.local.as_ref());
+
+        assert!(!should_defer_dual_file_delivery(&snapshot, &reply));
+    }
+
+    #[test]
+    fn allows_partial_dual_updates_that_stay_under_text_limit() {
+        let snapshot = DualProgress {
+            cloud: Some(result("cloud", "短文本".to_owned())),
+            local: None,
+        };
+        let reply = render::dual_refinement_reply(snapshot.cloud.as_ref(), snapshot.local.as_ref());
+
+        assert!(!should_defer_dual_file_delivery(&snapshot, &reply));
+    }
 }

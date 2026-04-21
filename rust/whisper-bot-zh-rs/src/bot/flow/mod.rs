@@ -10,3 +10,10 @@ pub struct DualProgress {
     pub cloud: Option<RefinementResult>,
     pub local: Option<RefinementResult>,
 }
+
+impl DualProgress {
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.cloud.is_some() && self.local.is_some()
+    }
+}
