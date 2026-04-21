@@ -11,7 +11,7 @@ use crate::config::Settings;
 #[derive(Clone)]
 pub struct AsrService {
     client: reqwest::Client,
-    semaphore: Arc<Semaphore>,
+    limiter: Arc<Semaphore>,
     endpoint: String,
     api_key: String,
     model: String,
@@ -40,7 +40,7 @@ impl AsrService {
             &settings.asr_language,
             &settings.asr_prompt,
             settings.asr_temperature,
-            settings.max_concurrent_tasks,
+            settings.asr_max_concurrent,
         ))
     }
 
@@ -58,7 +58,7 @@ impl AsrService {
     ) -> Self {
         Self {
             client,
-            semaphore: Arc::new(Semaphore::new(max_concurrent.max(1))),
+            limiter: Arc::new(Semaphore::new(max_concurrent.max(1))),
             endpoint: format!("{}/audio/transcriptions", base_url.trim_end_matches('/')),
             api_key,
             model: model.to_owned(),
@@ -75,8 +75,9 @@ impl AsrService {
 
     pub async fn transcribe(&self, audio: Bytes) -> Result<String> {
         let _permit = self
-            .semaphore
-            .acquire()
+            .limiter
+            .clone()
+            .acquire_owned()
             .await
             .context("ASR semaphore closed unexpectedly")?;
 

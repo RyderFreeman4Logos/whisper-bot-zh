@@ -1,4 +1,7 @@
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
+use tokio::sync::Semaphore;
 
 use crate::config::Settings;
 
@@ -7,12 +10,13 @@ use super::{ChatRefiner, RefinementResult};
 #[derive(Clone)]
 pub struct LocalRefiner {
     inner: ChatRefiner,
+    limiter: Arc<Semaphore>,
 }
 
 impl LocalRefiner {
     #[must_use]
-    pub fn new(inner: ChatRefiner) -> Self {
-        Self { inner }
+    pub fn new(inner: ChatRefiner, limiter: Arc<Semaphore>) -> Self {
+        Self { inner, limiter }
     }
 
     pub fn from_settings(settings: &Settings) -> Result<Option<Self>> {
@@ -27,22 +31,27 @@ impl LocalRefiner {
             .llm_local_model
             .as_deref()
             .context("LLM_LOCAL_MODEL must be set for local refinement")?;
+        let limiter = Arc::new(Semaphore::new(settings.llm_local_max_concurrent));
 
-        Ok(Some(Self::new(ChatRefiner::new(
-            settings.outbound_http_client()?,
-            base_url,
-            api_key,
-            model,
-            settings
-                .llm_system_prompt
-                .clone()
-                .unwrap_or_else(|| super::prompt::SYSTEM_PROMPT.to_owned()),
-            settings.local_timeout(),
-            settings.heartbeat_interval(),
-            settings.llm_temperature,
-            settings.llm_top_p,
-            settings.llm_max_tokens,
-        ))))
+        Ok(Some(Self::new(
+            ChatRefiner::new(
+                settings.outbound_http_client()?,
+                base_url,
+                api_key,
+                model,
+                settings
+                    .llm_system_prompt
+                    .clone()
+                    .unwrap_or_else(|| super::prompt::SYSTEM_PROMPT.to_owned()),
+                settings.local_timeout(),
+                settings.heartbeat_interval(),
+                settings.llm_temperature,
+                settings.llm_top_p,
+                settings.llm_max_tokens,
+                settings.llm_local_reasoning_effort.clone(),
+            ),
+            limiter,
+        )))
     }
 
     #[must_use]
@@ -51,6 +60,12 @@ impl LocalRefiner {
     }
 
     pub async fn refine(&self, transcript: &str) -> Result<RefinementResult> {
+        let _permit = self
+            .limiter
+            .clone()
+            .acquire_owned()
+            .await
+            .context("local LLM semaphore closed unexpectedly")?;
         self.inner.refine(transcript).await
     }
 }

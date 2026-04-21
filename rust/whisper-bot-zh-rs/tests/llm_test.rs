@@ -1,15 +1,13 @@
 use std::time::Duration;
 
-#[path = "support/llm.rs"]
+#[path = "support/llm_core.rs"]
 mod support;
 
 use serde_json::json;
-use tracing::Level;
-use tracing_subscriber::FmtSubscriber;
 use wiremock::matchers::{body_partial_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use support::{chat_body, refiner, slow_refiner, success_template, SharedWriter};
+use support::{chat_body, limiter, refiner, success_template};
 use whisper_bot_zh::llm::{CloudRefiner, LlmService, LocalRefiner};
 
 #[tokio::test]
@@ -22,7 +20,6 @@ async fn cloud_refiner_falls_back_to_next_model() {
         .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
         .mount(&server)
         .await;
-
     Mock::given(method("POST"))
         .and(path("/chat/completions"))
         .and(header("authorization", "Bearer cloud-secret"))
@@ -31,11 +28,13 @@ async fn cloud_refiner_falls_back_to_next_model() {
         .mount(&server)
         .await;
 
-    let cloud = CloudRefiner::new(vec![
-        refiner(&server.uri(), "cloud-secret", "broken-model"),
-        refiner(&server.uri(), "cloud-secret", "working-model"),
-    ]);
-
+    let cloud = CloudRefiner::new(
+        vec![
+            refiner(&server.uri(), "cloud-secret", "broken-model"),
+            refiner(&server.uri(), "cloud-secret", "working-model"),
+        ],
+        limiter(3),
+    );
     let result = cloud
         .refine("原始文本")
         .await
@@ -58,7 +57,10 @@ async fn local_refiner_works_against_openai_compatible_endpoint() {
         .mount(&server)
         .await;
 
-    let local = LocalRefiner::new(refiner(&server.uri(), "local-secret", "qwen-local"));
+    let local = LocalRefiner::new(
+        refiner(&server.uri(), "local-secret", "qwen-local"),
+        limiter(1),
+    );
     let result = local
         .refine("原始文本")
         .await
@@ -80,7 +82,6 @@ async fn dual_mode_returns_both_results() {
         .respond_with(success_template("cloud output"))
         .mount(&cloud_server)
         .await;
-
     Mock::given(method("POST"))
         .and(path("/chat/completions"))
         .and(body_partial_json(json!({ "model": "qwen-local" })))
@@ -89,18 +90,15 @@ async fn dual_mode_returns_both_results() {
         .await;
 
     let service = LlmService::from_refiners(
-        Some(CloudRefiner::new(vec![refiner(
-            &cloud_server.uri(),
-            "cloud-secret",
-            "groq-fast",
-        )])),
-        Some(LocalRefiner::new(refiner(
-            &local_server.uri(),
-            "local-secret",
-            "qwen-local",
-        ))),
+        Some(CloudRefiner::new(
+            vec![refiner(&cloud_server.uri(), "cloud-secret", "groq-fast")],
+            limiter(3),
+        )),
+        Some(LocalRefiner::new(
+            refiner(&local_server.uri(), "local-secret", "qwen-local"),
+            limiter(1),
+        )),
     );
-
     let results = service
         .refine_dual("原始文本")
         .await
@@ -122,7 +120,6 @@ async fn dual_progress_streams_first_completed_model() {
         .respond_with(success_template("cloud output"))
         .mount(&cloud_server)
         .await;
-
     Mock::given(method("POST"))
         .and(path("/chat/completions"))
         .and(body_partial_json(json!({ "model": "qwen-local" })))
@@ -135,18 +132,15 @@ async fn dual_progress_streams_first_completed_model() {
         .await;
 
     let service = LlmService::from_refiners(
-        Some(CloudRefiner::new(vec![refiner(
-            &cloud_server.uri(),
-            "cloud-secret",
-            "groq-fast",
-        )])),
-        Some(LocalRefiner::new(refiner(
-            &local_server.uri(),
-            "local-secret",
-            "qwen-local",
-        ))),
+        Some(CloudRefiner::new(
+            vec![refiner(&cloud_server.uri(), "cloud-secret", "groq-fast")],
+            limiter(3),
+        )),
+        Some(LocalRefiner::new(
+            refiner(&local_server.uri(), "local-secret", "qwen-local"),
+            limiter(1),
+        )),
     );
-
     let mut updates = whisper_bot_zh::bot::flow::dual::collect(service, "原始文本".to_owned());
 
     let first = tokio::time::timeout(Duration::from_millis(60), updates.recv())
@@ -173,39 +167,4 @@ async fn dual_progress_streams_first_completed_model() {
         second.cloud.as_ref().map(|result| result.model.as_str()),
         Some("groq-fast")
     );
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn heartbeat_logs_while_waiting_for_slow_response() {
-    let server = MockServer::start().await;
-
-    Mock::given(method("POST"))
-        .and(path("/chat/completions"))
-        .and(body_partial_json(json!({ "model": "slow-model" })))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_delay(Duration::from_millis(90))
-                .set_body_json(chat_body("slow output")),
-        )
-        .mount(&server)
-        .await;
-
-    let writer = SharedWriter::default();
-    let subscriber = FmtSubscriber::builder()
-        .with_ansi(false)
-        .with_max_level(Level::INFO)
-        .without_time()
-        .with_writer(writer.clone())
-        .finish();
-    let _guard = tracing::subscriber::set_default(subscriber);
-
-    let result = slow_refiner(&server.uri())
-        .refine("原始文本")
-        .await
-        .expect("slow request should still succeed");
-
-    let logs = writer.contents();
-    assert_eq!(result.text, "slow output");
-    assert!(logs.contains("still waiting, elapsed="));
-    assert!(logs.contains("slow-model"));
 }

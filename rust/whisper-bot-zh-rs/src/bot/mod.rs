@@ -5,6 +5,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use teloxide::dispatching::UpdateFilterExt;
 use teloxide::prelude::*;
+use tokio::sync::Semaphore;
 
 use crate::asr::AsrService;
 use crate::auth::AuthService;
@@ -18,6 +19,15 @@ pub mod telegram_limit;
 pub mod voice;
 
 type HandlerResult = ResponseResult<()>;
+
+#[derive(Clone)]
+struct DispatchDeps {
+    asr: Arc<AsrService>,
+    auth: Arc<AuthService>,
+    governor: Arc<render::TelegramGovernor>,
+    llm: Arc<LlmService>,
+    voice_limiter: Arc<Semaphore>,
+}
 
 pub async fn run(settings: Settings) -> Result<()> {
     let settings = Arc::new(settings);
@@ -33,11 +43,23 @@ pub async fn run(settings: Settings) -> Result<()> {
     let asr = Arc::new(AsrService::new(settings.as_ref())?);
     let auth = Arc::new(AuthService::new(settings.as_ref()).await?);
     let llm = Arc::new(LlmService::new(settings.as_ref())?);
+    let governor = Arc::new(render::TelegramGovernor::new(
+        bot.clone(),
+        settings.telegram_edit_min_interval(),
+    ));
+    let voice_limiter = Arc::new(Semaphore::new(settings.max_concurrent_tasks));
+    let deps = Arc::new(DispatchDeps {
+        asr,
+        auth,
+        governor,
+        llm,
+        voice_limiter,
+    });
 
     let handler = Update::filter_message().endpoint(dispatch_message);
 
     let mut dispatcher = Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![asr, auth, llm, bot_username])
+        .dependencies(dptree::deps![deps, bot_username])
         .enable_ctrlc_handler()
         .build();
 
@@ -49,19 +71,17 @@ pub async fn run(settings: Settings) -> Result<()> {
 async fn dispatch_message(
     bot: Bot,
     message: Message,
-    asr: Arc<AsrService>,
-    auth: Arc<AuthService>,
-    llm: Arc<LlmService>,
+    deps: Arc<DispatchDeps>,
     bot_username: Arc<String>,
 ) -> HandlerResult {
     if let Some(text) = message.text() {
         if commands::is_supported_command(text, bot_username.as_str()) {
             return commands::handle_command(
-                &bot,
+                deps.governor.as_ref(),
                 &message,
                 text,
                 bot_username.as_str(),
-                auth.as_ref(),
+                deps.auth.as_ref(),
             )
             .await;
         }
@@ -73,8 +93,23 @@ async fn dispatch_message(
         // Without this, a 1800s local-timeout on one voice silently blocks
         // every later voice on the same chat.
         tokio::spawn(async move {
-            if let Err(error) =
-                voice::handle_audio(&bot, &message, asr.as_ref(), llm.as_ref(), auth.as_ref()).await
+            let voice_permit = match deps.voice_limiter.clone().acquire_owned().await {
+                Ok(permit) => permit,
+                Err(error) => {
+                    tracing::error!(%error, "voice handler semaphore closed");
+                    return;
+                }
+            };
+            if let Err(error) = voice::handle_audio(
+                &bot,
+                deps.governor.as_ref(),
+                &message,
+                deps.asr.as_ref(),
+                deps.llm.as_ref(),
+                deps.auth.as_ref(),
+                voice_permit,
+            )
+            .await
             {
                 tracing::error!(%error, "voice handler task failed");
             }

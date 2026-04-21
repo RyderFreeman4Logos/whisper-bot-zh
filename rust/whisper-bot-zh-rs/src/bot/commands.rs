@@ -2,6 +2,8 @@ use teloxide::prelude::*;
 
 use crate::auth::AuthService;
 
+use super::render::TelegramGovernor;
+
 const AUTH_SUCCESS_REPLY: &str = "✅ 认证成功！现在可以发送语音或音频消息了。";
 const AUTH_INVALID_PASSWORD_REPLY: &str = "❌ 认证失败，密码错误。";
 const AUTH_INTERNAL_ERROR_REPLY: &str = "❌ 认证失败：内部错误，请稍后重试。";
@@ -19,54 +21,56 @@ pub fn is_supported_command(text: &str, bot_username: &str) -> bool {
 }
 
 pub async fn handle_command(
-    bot: &Bot,
+    governor: &TelegramGovernor,
     message: &Message,
     text: &str,
     bot_username: &str,
     auth: &AuthService,
 ) -> ResponseResult<()> {
     match command_name(text, bot_username) {
-        Some("/start") => start_command(bot, message, command_args(text), auth).await,
-        Some("/auth") => auth_command(bot, message, command_args(text), auth).await,
+        Some("/start") => start_command(governor, message, command_args(text), auth).await,
+        Some("/auth") => auth_command(governor, message, command_args(text), auth).await,
         _ => Ok(()),
     }
 }
 
 async fn start_command(
-    bot: &Bot,
+    governor: &TelegramGovernor,
     message: &Message,
     password: Option<&str>,
     auth: &AuthService,
 ) -> ResponseResult<()> {
     if let Some(password) = password.filter(|value| !value.is_empty()) {
-        return authenticate(bot, message, password, auth).await;
+        return authenticate(governor, message, password, auth).await;
     }
 
-    bot.send_message(
-        message.chat.id,
-        "👋 欢迎使用 Whisper 语音转文字机器人！\n\n请先使用 /start <password> 或 /auth <password> 完成认证，然后发送语音或音频消息。",
-    )
-    .await?;
+    governor
+        .send_message(
+            message.chat.id,
+            "👋 欢迎使用 Whisper 语音转文字机器人！\n\n请先使用 /start <password> 或 /auth <password> 完成认证，然后发送语音或音频消息。",
+        )
+        .await?;
     Ok(())
 }
 
 async fn auth_command(
-    bot: &Bot,
+    governor: &TelegramGovernor,
     message: &Message,
     password: Option<&str>,
     auth: &AuthService,
 ) -> ResponseResult<()> {
     let Some(password) = password.filter(|value| !value.is_empty()) else {
-        bot.send_message(message.chat.id, "⚠️ 请输入密码，格式：/auth <password>")
+        governor
+            .send_message(message.chat.id, "⚠️ 请输入密码，格式：/auth <password>")
             .await?;
         return Ok(());
     };
 
-    authenticate(bot, message, password, auth).await
+    authenticate(governor, message, password, auth).await
 }
 
 async fn authenticate(
-    bot: &Bot,
+    governor: &TelegramGovernor,
     message: &Message,
     password: &str,
     auth: &AuthService,
@@ -88,7 +92,8 @@ async fn authenticate(
         }
     };
 
-    bot.send_message(message.chat.id, auth_reply(outcome))
+    governor
+        .send_message(message.chat.id, auth_reply(outcome))
         .await?;
     Ok(())
 }

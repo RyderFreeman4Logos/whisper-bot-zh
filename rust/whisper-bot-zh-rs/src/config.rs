@@ -20,6 +20,7 @@ pub struct Settings {
     pub log_level: String,
     pub asr_base_url: String,
     pub asr_api_key: Option<String>,
+    pub asr_max_concurrent: usize,
     pub asr_model: String,
     pub asr_language: String,
     pub asr_prompt: String,
@@ -33,10 +34,14 @@ pub struct Settings {
     pub llm_local_base_url: Option<String>,
     pub llm_local_api_key: Option<String>,
     pub llm_local_model: Option<String>,
+    pub llm_local_reasoning_effort: Option<String>,
+    pub llm_cloud_max_concurrent: usize,
+    pub llm_local_max_concurrent: usize,
 
     pub llm_cloud_timeout_sec: f64,
     pub llm_local_timeout_sec: f64,
     pub llm_heartbeat_interval_sec: f64,
+    pub telegram_edit_min_interval_ms: u64,
     pub groq_api: Option<String>,
     pub gemini_api: Option<String>,
     pub anthropic_api_key: Option<String>,
@@ -81,6 +86,7 @@ impl Settings {
             asr_base_url: optional("ASR_BASE_URL")
                 .unwrap_or_else(|| "https://api.groq.com/openai/v1".into()),
             asr_api_key: optional("ASR_API_KEY"),
+            asr_max_concurrent: optional_parsed("ASR_MAX_CONCURRENT")?.unwrap_or(3),
             asr_model: optional("ASR_MODEL").unwrap_or_else(|| "whisper-large-v3".into()),
             asr_language: optional("ASR_LANGUAGE").unwrap_or_else(|| "zh".into()),
             asr_prompt: optional("ASR_PROMPT")
@@ -95,10 +101,17 @@ impl Settings {
             llm_local_base_url: optional("LLM_LOCAL_BASE_URL"),
             llm_local_api_key: optional("LLM_LOCAL_API_KEY"),
             llm_local_model: optional("LLM_LOCAL_MODEL"),
+            llm_local_reasoning_effort: parse_reasoning_effort(optional(
+                "LLM_LOCAL_REASONING_EFFORT",
+            ))?,
+            llm_cloud_max_concurrent: optional_parsed("LLM_CLOUD_MAX_CONCURRENT")?.unwrap_or(3),
+            llm_local_max_concurrent: optional_parsed("LLM_LOCAL_MAX_CONCURRENT")?.unwrap_or(1),
             llm_cloud_timeout_sec: optional_parsed("LLM_CLOUD_TIMEOUT_SEC")?.unwrap_or(120.0),
             llm_local_timeout_sec: optional_parsed("LLM_LOCAL_TIMEOUT_SEC")?.unwrap_or(1800.0),
             llm_heartbeat_interval_sec: optional_parsed("LLM_HEARTBEAT_INTERVAL_SEC")?
                 .unwrap_or(20.0),
+            telegram_edit_min_interval_ms: optional_parsed("TELEGRAM_EDIT_MIN_INTERVAL_MS")?
+                .unwrap_or(500),
             groq_api: optional("GROQ_API").or_else(|| optional("GROQ_API_KEY")),
             gemini_api: optional("GEMINI_API"),
             anthropic_api_key: optional("ANTHROPIC_API_KEY").or_else(|| optional("ANTHROPIC_API")),
@@ -123,6 +136,10 @@ impl Settings {
         if self.access_password.trim().is_empty() {
             bail!("ACCESS_PASSWORD must not be empty");
         }
+        validate_positive_usize("MAX_CONCURRENT_TASKS", self.max_concurrent_tasks)?;
+        validate_positive_usize("ASR_MAX_CONCURRENT", self.asr_max_concurrent)?;
+        validate_positive_usize("LLM_CLOUD_MAX_CONCURRENT", self.llm_cloud_max_concurrent)?;
+        validate_positive_usize("LLM_LOCAL_MAX_CONCURRENT", self.llm_local_max_concurrent)?;
         timeouts::validate(self)?;
         Ok(())
     }
@@ -160,19 +177,21 @@ impl Settings {
             .or(self.groq_api.as_deref())
             .or(self.openai_api_key.as_deref())
     }
+}
 
-    #[must_use]
-    pub fn allowed_users_file(&self) -> PathBuf {
-        self.data_dir.join("allowed_users.json")
+fn parse_reasoning_effort(value: Option<String>) -> Result<Option<String>> {
+    match value.as_deref() {
+        Some("none" | "low" | "medium" | "high") => Ok(value),
+        Some(_) => bail!(
+            "LLM_LOCAL_REASONING_EFFORT must be one of none, low, medium, high; got {value:?}"
+        ),
+        None => Ok(None),
     }
+}
 
-    #[must_use]
-    pub fn bot_token_suffix(&self) -> String {
-        let token = &self.bot_token;
-        if token.len() > 6 {
-            format!("...{}", &token[token.len() - 6..])
-        } else {
-            "******".into()
-        }
+fn validate_positive_usize(key: &str, value: usize) -> Result<()> {
+    if value == 0 {
+        bail!("{key} must be greater than zero");
     }
+    Ok(())
 }

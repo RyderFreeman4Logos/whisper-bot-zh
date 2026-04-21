@@ -29,6 +29,11 @@ impl Settings {
     pub fn heartbeat_interval(&self) -> Duration {
         Duration::from_secs_f64(self.llm_heartbeat_interval_sec)
     }
+
+    #[must_use]
+    pub fn telegram_edit_min_interval(&self) -> Duration {
+        Duration::from_millis(self.telegram_edit_min_interval_ms)
+    }
 }
 
 fn validate_positive_f64(key: &str, value: f64) -> Result<()> {
