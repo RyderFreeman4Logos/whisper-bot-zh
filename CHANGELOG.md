@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.2.0] - 2026-04-21
+
+### Breaking
+- **ASR backend replaced.** `faster-whisper` + local CUDA removed; now uses any
+  OpenAI-compatible audio transcription endpoint (Groq by default,
+  `whisper-large-v3`). Removed env keys: `WHISPER_MODEL_SIZE`,
+  `WHISPER_COMPUTE_TYPE`, `WHISPER_INITIAL_PROMPT`, `WHISPER_VAD_FILTER`.
+  Added: `ASR_BASE_URL`, `ASR_API_KEY`, `ASR_MODEL`, `ASR_LANGUAGE`,
+  `ASR_PROMPT`, `ASR_TEMPERATURE`. Existing `GROQ_API_KEY` in the env still
+  works — `ASR_API_KEY` falls back to it.
+- Removed `--model-dir` CLI flag (no more local model to manage).
+- Dropped heavy deps: `faster-whisper`, `nvidia-cudnn-cu12`,
+  `nvidia-cublas-cu12` (~2 GB on disk + ~3 GB VRAM at runtime).
+
+### Fixed
+- **LLM refinement "trailing commentary" hallucination.** The previous prompt
+  only forbade prefaces; models still appended `建议 / 补充 / 总结` blocks.
+  Rewrote the system prompt to explicitly forbid trailing content and to
+  instruct the model to stop at the end of the source text. User message also
+  wraps the transcript with a repeated "no commentary" boundary.
+
+### Added
+- Config knobs for LLM sampling: `LLM_TEMPERATURE` (default 0.2, was hardcoded
+  0.3), `LLM_TOP_P`, `LLM_MAX_TOKENS`. `top_p` / `max_tokens` are omitted from
+  the API call when unset so provider defaults apply.
+
+### Changed
+- `main.py` lost the 40-line `_ensure_cuda_libs_in_ld_path` block and the
+  re-exec dance — no longer needed without CUDA. Socket IPv4 patch retained.
+
 ## [0.1.0] - 2025-11-20
 
 ### Added
