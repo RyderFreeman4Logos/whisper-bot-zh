@@ -1,3 +1,4 @@
+use std::future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -72,7 +73,7 @@ async fn telegram_governor_retries_on_retry_after() {
         let attempts = Arc::clone(&attempts);
         async move {
             governor
-                .run_write_operation(|| {
+                .run_serialized_chat_operation(ChatId(7), || {
                     let attempts = Arc::clone(&attempts);
                     async move {
                         let attempt = attempts.fetch_add(1, Ordering::SeqCst);
@@ -179,6 +180,70 @@ async fn telegram_governor_shares_retry_after_window_across_same_chat_edits() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn telegram_governor_shares_retry_after_window_across_same_chat_writes() {
+    let governor = governor(Duration::ZERO);
+    let first_attempts = Arc::new(AtomicUsize::new(0));
+    let second_attempts = Arc::new(AtomicUsize::new(0));
+
+    let first = tokio::spawn({
+        let governor = governor.clone();
+        let first_attempts = Arc::clone(&first_attempts);
+        async move {
+            governor
+                .run_serialized_chat_operation(ChatId(7), || {
+                    let first_attempts = Arc::clone(&first_attempts);
+                    async move {
+                        let attempt = first_attempts.fetch_add(1, Ordering::SeqCst);
+                        if attempt == 0 {
+                            Err(RequestError::RetryAfter(Seconds::from_seconds(1)))
+                        } else {
+                            Ok::<(), RequestError>(())
+                        }
+                    }
+                })
+                .await
+                .expect("first write should eventually succeed");
+        }
+    });
+
+    tokio::task::yield_now().await;
+    assert_eq!(first_attempts.load(Ordering::SeqCst), 1);
+
+    let second = tokio::spawn({
+        let governor = governor.clone();
+        let second_attempts = Arc::clone(&second_attempts);
+        async move {
+            governor
+                .run_serialized_chat_operation(ChatId(7), || {
+                    let second_attempts = Arc::clone(&second_attempts);
+                    async move {
+                        second_attempts.fetch_add(1, Ordering::SeqCst);
+                        Ok::<(), RequestError>(())
+                    }
+                })
+                .await
+                .expect("second write should succeed");
+        }
+    });
+
+    tokio::task::yield_now().await;
+    assert_eq!(second_attempts.load(Ordering::SeqCst), 0);
+
+    tokio::time::advance(Duration::from_millis(999)).await;
+    tokio::task::yield_now().await;
+    assert_eq!(second_attempts.load(Ordering::SeqCst), 0);
+
+    tokio::time::advance(Duration::from_millis(1)).await;
+    tokio::task::yield_now().await;
+
+    first.await.expect("first task should complete");
+    second.await.expect("second task should complete");
+
+    assert_eq!(first_attempts.load(Ordering::SeqCst), 2);
+    assert_eq!(second_attempts.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test(start_paused = true)]
 async fn telegram_governor_serializes_concurrent_same_chat_edits() {
     let min_interval = Duration::from_millis(500);
     let governor = governor(min_interval);
@@ -259,4 +324,40 @@ async fn telegram_governor_serializes_concurrent_same_chat_edits() {
         .await
         .expect("second edit should record start");
     assert!(second_started_at >= first_finished_at + min_interval);
+}
+
+#[tokio::test(start_paused = true)]
+async fn telegram_governor_cleans_up_cancelled_idle_chat_state() {
+    let governor = governor(Duration::ZERO);
+    let started = Arc::new(Notify::new());
+
+    let cancelled = tokio::spawn({
+        let governor = governor.clone();
+        let started = Arc::clone(&started);
+        async move {
+            let _ = governor
+                .run_serialized_chat_operation(ChatId(7), || {
+                    let started = Arc::clone(&started);
+                    async move {
+                        started.notify_one();
+                        future::pending::<Result<(), RequestError>>().await
+                    }
+                })
+                .await;
+        }
+    });
+
+    started.notified().await;
+    assert_eq!(governor.tracked_chat_count(), 1);
+
+    cancelled.abort();
+    tokio::task::yield_now().await;
+    assert_eq!(governor.tracked_chat_count(), 1);
+
+    governor
+        .run_edit_operation(ChatId(8), || async { Ok::<(), RequestError>(()) })
+        .await
+        .expect("new chat operation should succeed");
+
+    assert_eq!(governor.tracked_chat_count(), 1);
 }

@@ -111,7 +111,7 @@ impl TelegramGovernor {
         document: InputFile,
         caption: String,
     ) -> ResponseResult<Message> {
-        self.run_write_operation(|| {
+        self.run_serialized_chat_operation(chat_id, || {
             let bot = self.bot.clone();
             let document = document.clone();
             let caption = caption.clone();
@@ -131,7 +131,7 @@ impl TelegramGovernor {
         text: impl Into<String>,
     ) -> ResponseResult<Message> {
         let text = text.into();
-        self.run_write_operation(|| {
+        self.run_serialized_chat_operation(chat_id, || {
             let bot = self.bot.clone();
             let text = text.clone();
             async move { bot.send_message(chat_id, text).await }
@@ -139,7 +139,7 @@ impl TelegramGovernor {
         .await
     }
 
-    pub(super) async fn run_edit_operation<T, Op, Fut>(
+    pub(super) async fn run_serialized_chat_operation<T, Op, Fut>(
         &self,
         chat_id: ChatId,
         operation: Op,
@@ -153,13 +153,16 @@ impl TelegramGovernor {
             .await
     }
 
-    pub(super) async fn run_write_operation<T, Op, Fut>(&self, operation: Op) -> ResponseResult<T>
+    pub(super) async fn run_edit_operation<T, Op, Fut>(
+        &self,
+        chat_id: ChatId,
+        operation: Op,
+    ) -> ResponseResult<T>
     where
         Op: FnMut() -> Fut,
         Fut: Future<Output = ResponseResult<T>>,
     {
-        self.run_write_operation_with_edit_state(operation, None)
-            .await
+        self.run_serialized_chat_operation(chat_id, operation).await
     }
 
     async fn run_write_operation_with_edit_state<T, Op, Fut>(
@@ -243,11 +246,16 @@ impl TelegramGovernor {
             }
 
             match state.try_lock() {
-                Ok(state) => state.next_allowed_at.is_none_or(|next_allowed_at| {
+                Ok(state) => state.next_allowed_at.is_some_and(|next_allowed_at| {
                     now.saturating_duration_since(next_allowed_at) <= stale_after
                 }),
                 Err(_) => true,
             }
         });
+    }
+
+    #[cfg(test)]
+    pub(super) fn tracked_chat_count(&self) -> usize {
+        self.edit_states.lock().expect("edit governor lock").len()
     }
 }
