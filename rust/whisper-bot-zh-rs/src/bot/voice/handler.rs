@@ -41,7 +41,11 @@ pub async fn handle_audio(
     {
         tracing::error!(%error, "voice handler failed");
         if let Err(send_error) = governor
-            .send_message(message.chat.id, format!("❌ 处理出错：{error:#}"))
+            .send_reply(
+                message.chat.id,
+                message.id,
+                format!("❌ 处理出错：{error:#}"),
+            )
             .await
         {
             tracing::warn!(%send_error, "failed to send error message");
@@ -66,7 +70,7 @@ async fn handle_audio_inner(
         anyhow::bail!("message has no voice or audio payload");
     };
     let progress = governor
-        .send_message(message.chat.id, "⏳ 正在接收并处理音频...")
+        .send_reply(message.chat.id, message.id, "⏳ 正在接收并处理音频...")
         .await
         .context("failed to send progress message")?;
 
@@ -95,6 +99,7 @@ async fn handle_audio_inner(
     render::deliver(
         governor,
         &progress,
+        message.id,
         render::transcript_reply(&transcript, asr.model(), started.elapsed()),
     )
     .await
@@ -110,7 +115,7 @@ async fn handle_audio_inner(
         "✨ 正在进行智能润色..."
     };
     let refinement_message = governor
-        .send_message(message.chat.id, status)
+        .send_reply(message.chat.id, message.id, status)
         .await
         .context("failed to send refinement status")?;
 
@@ -136,7 +141,7 @@ async fn handle_audio_inner(
                 continue;
             }
 
-            render::deliver(governor, &refinement_message, reply)
+            render::deliver(governor, &refinement_message, message.id, reply)
                 .await
                 .context("failed to deliver dual refinement progress")?;
         }
@@ -145,6 +150,7 @@ async fn handle_audio_inner(
         render::deliver(
             governor,
             &refinement_message,
+            message.id,
             render::single_refinement_reply(&result),
         )
         .await
