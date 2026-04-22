@@ -182,30 +182,26 @@ async fn telegram_governor_shares_retry_after_window_across_same_chat_edits() {
 async fn telegram_governor_serializes_concurrent_same_chat_edits() {
     let min_interval = Duration::from_millis(500);
     let governor = governor(min_interval);
-    let observed = Arc::new(Mutex::new(Vec::<Instant>::new()));
-    let started = Arc::new(AtomicUsize::new(0));
     let first_started = Arc::new(Notify::new());
     let release_first = Arc::new(Notify::new());
+    let first_finished_at = Arc::new(Mutex::new(None::<Instant>));
+    let second_started_at = Arc::new(Mutex::new(None::<Instant>));
 
     let first = tokio::spawn({
         let governor = governor.clone();
-        let observed = Arc::clone(&observed);
-        let started = Arc::clone(&started);
         let first_started = Arc::clone(&first_started);
         let release_first = Arc::clone(&release_first);
+        let first_finished_at = Arc::clone(&first_finished_at);
         async move {
             governor
                 .run_edit_operation(ChatId(7), || {
-                    let observed = Arc::clone(&observed);
-                    let started = Arc::clone(&started);
                     let first_started = Arc::clone(&first_started);
                     let release_first = Arc::clone(&release_first);
+                    let first_finished_at = Arc::clone(&first_finished_at);
                     async move {
-                        observed.lock().await.push(Instant::now());
-                        if started.fetch_add(1, Ordering::SeqCst) == 0 {
-                            first_started.notify_one();
-                            release_first.notified().await;
-                        }
+                        first_started.notify_one();
+                        release_first.notified().await;
+                        *first_finished_at.lock().await = Some(Instant::now());
                         Ok::<(), RequestError>(())
                     }
                 })
@@ -218,23 +214,13 @@ async fn telegram_governor_serializes_concurrent_same_chat_edits() {
 
     let second = tokio::spawn({
         let governor = governor.clone();
-        let observed = Arc::clone(&observed);
-        let started = Arc::clone(&started);
-        let first_started = Arc::clone(&first_started);
-        let release_first = Arc::clone(&release_first);
+        let second_started_at = Arc::clone(&second_started_at);
         async move {
             governor
                 .run_edit_operation(ChatId(7), || {
-                    let observed = Arc::clone(&observed);
-                    let started = Arc::clone(&started);
-                    let first_started = Arc::clone(&first_started);
-                    let release_first = Arc::clone(&release_first);
+                    let second_started_at = Arc::clone(&second_started_at);
                     async move {
-                        observed.lock().await.push(Instant::now());
-                        if started.fetch_add(1, Ordering::SeqCst) == 0 {
-                            first_started.notify_one();
-                            release_first.notified().await;
-                        }
+                        *second_started_at.lock().await = Some(Instant::now());
                         Ok::<(), RequestError>(())
                     }
                 })
@@ -244,21 +230,33 @@ async fn telegram_governor_serializes_concurrent_same_chat_edits() {
     });
 
     tokio::task::yield_now().await;
-    assert_eq!(observed.lock().await.len(), 1);
+    assert!(second_started_at.lock().await.is_none());
+
+    tokio::time::advance(min_interval.saturating_mul(2)).await;
+    tokio::task::yield_now().await;
+    assert!(second_started_at.lock().await.is_none());
+
+    release_first.notify_one();
+    tokio::task::yield_now().await;
+    assert!(second_started_at.lock().await.is_none());
 
     tokio::time::advance(min_interval.saturating_sub(Duration::from_millis(1))).await;
     tokio::task::yield_now().await;
-    assert_eq!(observed.lock().await.len(), 1);
+    assert!(second_started_at.lock().await.is_none());
 
     tokio::time::advance(Duration::from_millis(1)).await;
     tokio::task::yield_now().await;
-    assert_eq!(observed.lock().await.len(), 2);
 
-    release_first.notify_one();
     first.await.expect("first task should complete");
     second.await.expect("second task should complete");
 
-    let observed = observed.lock().await;
-    assert_eq!(observed.len(), 2);
-    assert!(observed[1].duration_since(observed[0]) >= min_interval);
+    let first_finished_at = first_finished_at
+        .lock()
+        .await
+        .expect("first edit should record completion");
+    let second_started_at = second_started_at
+        .lock()
+        .await
+        .expect("second edit should record start");
+    assert!(second_started_at >= first_finished_at + min_interval);
 }

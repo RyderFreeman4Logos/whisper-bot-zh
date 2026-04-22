@@ -186,13 +186,15 @@ impl Settings {
 }
 
 fn parse_reasoning_effort(value: Option<String>) -> Result<Option<String>> {
-    match value.as_deref() {
-        Some("none" | "low" | "medium" | "high") => Ok(value),
-        Some(_) => bail!(
-            "LLM_LOCAL_REASONING_EFFORT must be one of none, low, medium, high; got {value:?}"
-        ),
-        None => Ok(None),
-    }
+    value
+        .map(|value| {
+            let normalized = value.trim().to_ascii_lowercase();
+            if normalized.is_empty() {
+                bail!("LLM_LOCAL_REASONING_EFFORT must not be empty");
+            }
+            Ok(normalized)
+        })
+        .transpose()
 }
 
 fn validate_positive_usize(key: &str, value: usize) -> Result<()> {

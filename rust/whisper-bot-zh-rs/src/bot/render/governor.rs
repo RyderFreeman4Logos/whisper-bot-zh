@@ -6,7 +6,7 @@ use std::time::Duration;
 use teloxide::prelude::*;
 use teloxide::types::{InputFile, ParseMode};
 use teloxide::{ApiError, RequestError};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tokio::time::Instant;
 
 struct EditState {
@@ -148,8 +148,8 @@ impl TelegramGovernor {
         Op: FnMut() -> Fut,
         Fut: Future<Output = ResponseResult<T>>,
     {
-        let edit_state = self.wait_for_edit_slot(chat_id).await;
-        self.run_write_operation_with_edit_state(operation, Some(edit_state))
+        let edit_state_guard = self.wait_for_edit_slot(chat_id).await;
+        self.run_write_operation_with_edit_state(operation, Some(edit_state_guard))
             .await
     }
 
@@ -165,7 +165,7 @@ impl TelegramGovernor {
     async fn run_write_operation_with_edit_state<T, Op, Fut>(
         &self,
         mut operation: Op,
-        edit_state: Option<Arc<AsyncMutex<EditState>>>,
+        mut edit_state_guard: Option<OwnedMutexGuard<EditState>>,
     ) -> ResponseResult<T>
     where
         Op: FnMut() -> Fut,
@@ -175,8 +175,8 @@ impl TelegramGovernor {
         loop {
             match operation().await {
                 Err(RequestError::RetryAfter(delay)) => {
-                    if let Some(edit_state) = edit_state.as_ref() {
-                        self.record_retry_after(edit_state, delay.duration()).await;
+                    if let Some(state) = edit_state_guard.as_mut() {
+                        Self::record_retry_after(state, delay.duration());
                     }
 
                     if retries >= self.max_retries {
@@ -187,8 +187,8 @@ impl TelegramGovernor {
                     tokio::time::sleep(delay.duration()).await;
                 }
                 Ok(value) => {
-                    if let Some(edit_state) = edit_state.as_ref() {
-                        self.record_edit(edit_state).await;
+                    if let Some(state) = edit_state_guard.as_mut() {
+                        self.record_edit(state);
                     }
                     return Ok(value);
                 }
@@ -197,38 +197,26 @@ impl TelegramGovernor {
         }
     }
 
-    async fn wait_for_edit_slot(&self, chat_id: ChatId) -> Arc<AsyncMutex<EditState>> {
+    async fn wait_for_edit_slot(&self, chat_id: ChatId) -> OwnedMutexGuard<EditState> {
         let edit_state = self.edit_state(chat_id);
         loop {
-            let delay = {
-                let mut state = edit_state.lock().await;
-                let now = Instant::now();
-                let delay = state.delay_until_allowed(now);
-                if delay.is_zero() {
-                    state.extend_to(now + self.min_interval);
-                }
-                delay
-            };
+            let state = Arc::clone(&edit_state).lock_owned().await;
+            let delay = state.delay_until_allowed(Instant::now());
 
             if delay.is_zero() {
-                return edit_state;
+                return state;
             }
 
+            drop(state);
             tokio::time::sleep(delay).await;
         }
     }
 
-    async fn record_edit(&self, edit_state: &Arc<AsyncMutex<EditState>>) {
-        let mut state = edit_state.lock().await;
+    fn record_edit(&self, state: &mut EditState) {
         state.extend_to(Instant::now() + self.min_interval);
     }
 
-    async fn record_retry_after(
-        &self,
-        edit_state: &Arc<AsyncMutex<EditState>>,
-        retry_after: Duration,
-    ) {
-        let mut state = edit_state.lock().await;
+    fn record_retry_after(state: &mut EditState, retry_after: Duration) {
         state.extend_to(Instant::now() + retry_after);
     }
 

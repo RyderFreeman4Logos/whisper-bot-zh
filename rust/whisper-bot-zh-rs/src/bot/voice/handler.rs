@@ -9,7 +9,6 @@ use tokio::sync::OwnedSemaphorePermit;
 
 use crate::asr::AsrService;
 use crate::audio;
-use crate::auth::AuthService;
 use crate::llm::LlmService;
 
 use super::super::render::TelegramGovernor;
@@ -28,7 +27,6 @@ pub async fn handle_audio(
     message: &Message,
     asr: &AsrService,
     llm: &LlmService,
-    auth: &AuthService,
     voice_permit: OwnedSemaphorePermit,
 ) -> ResponseResult<()> {
     if let Err(error) = Box::pin(handle_audio_inner(
@@ -37,7 +35,6 @@ pub async fn handle_audio(
         message,
         asr,
         llm,
-        auth,
         voice_permit,
     ))
     .await
@@ -59,21 +56,8 @@ async fn handle_audio_inner(
     message: &Message,
     asr: &AsrService,
     llm: &LlmService,
-    auth: &AuthService,
     _voice_permit: OwnedSemaphorePermit,
 ) -> Result<()> {
-    let user = message.from.as_ref().context("message sender is missing")?;
-    if !auth.is_user_allowed(user.id.0).await {
-        governor
-            .send_message(
-                message.chat.id,
-                "🔒 请先使用 /start <password> 或 /auth <password> 完成认证。",
-            )
-            .await
-            .context("failed to send auth warning")?;
-        return Ok(());
-    }
-
     let file_id = if let Some(voice) = message.voice() {
         voice.file.id.clone()
     } else if let Some(audio) = message.audio() {

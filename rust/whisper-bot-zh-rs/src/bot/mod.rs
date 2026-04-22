@@ -19,6 +19,7 @@ pub mod telegram_limit;
 pub mod voice;
 
 type HandlerResult = ResponseResult<()>;
+const VOICE_AUTH_WARNING: &str = "🔒 请先使用 /start <password> 或 /auth <password> 完成认证。";
 
 #[derive(Clone)]
 struct DispatchDeps {
@@ -93,6 +94,27 @@ async fn dispatch_message(
     }
 
     if message.voice().is_some() || message.audio().is_some() {
+        let Some(user) = message.from.as_ref() else {
+            if let Err(error) = deps
+                .governor
+                .send_message(message.chat.id, VOICE_AUTH_WARNING)
+                .await
+            {
+                tracing::warn!(%error, "failed to send voice auth warning");
+            }
+            return Ok(());
+        };
+        if !deps.auth.is_user_allowed(user.id.0).await {
+            if let Err(error) = deps
+                .governor
+                .send_message(message.chat.id, VOICE_AUTH_WARNING)
+                .await
+            {
+                tracing::warn!(%error, "failed to send voice auth warning");
+            }
+            return Ok(());
+        }
+
         // Acquire before spawn so the limiter bounds queued voice work too,
         // not just concurrently running handlers.
         let voice_permit = match deps.voice_limiter.clone().try_acquire_owned() {
@@ -125,7 +147,6 @@ async fn dispatch_message(
                 &message,
                 deps.asr.as_ref(),
                 deps.llm.as_ref(),
-                deps.auth.as_ref(),
                 voice_permit,
             )
             .await
