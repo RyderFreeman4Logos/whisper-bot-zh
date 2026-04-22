@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use teloxide::prelude::*;
-use teloxide::types::{InputFile, ParseMode};
+use teloxide::types::{InputFile, MessageId, ParseMode, ReplyParameters};
 use teloxide::{ApiError, RequestError};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tokio::time::Instant;
@@ -102,26 +102,6 @@ impl TelegramGovernor {
         }
     }
 
-    /// Send a document to a Telegram chat.
-    ///
-    /// Rate limiting and `RetryAfter` retries are handled by the underlying
-    /// [`Throttle`](teloxide::adaptors::throttle::Throttle) adaptor.
-    ///
-    /// # Errors
-    /// Returns an error if Telegram rejects the send for any reason other than
-    /// rate limiting (which the adaptor retries automatically).
-    pub async fn send_document(
-        &self,
-        chat_id: ChatId,
-        document: InputFile,
-        caption: String,
-    ) -> ResponseResult<Message> {
-        self.bot
-            .send_document(chat_id, document)
-            .caption(caption)
-            .await
-    }
-
     /// Send a text message to a Telegram chat.
     ///
     /// Rate limiting and `RetryAfter` retries are handled by the underlying
@@ -136,6 +116,45 @@ impl TelegramGovernor {
         text: impl Into<String>,
     ) -> ResponseResult<Message> {
         self.bot.send_message(chat_id, text).await
+    }
+
+    /// Send a text message that quotes/replies to an existing Telegram message.
+    ///
+    /// Used so users can tell which incoming voice produced which transcript
+    /// when several voices are in flight.
+    ///
+    /// # Errors
+    /// Returns an error if Telegram rejects the send for any reason other than
+    /// rate limiting (which the adaptor retries automatically).
+    pub async fn send_reply(
+        &self,
+        chat_id: ChatId,
+        reply_to: MessageId,
+        text: impl Into<String>,
+    ) -> ResponseResult<Message> {
+        self.bot
+            .send_message(chat_id, text)
+            .reply_parameters(ReplyParameters::new(reply_to))
+            .await
+    }
+
+    /// Send a document that quotes/replies to an existing Telegram message.
+    ///
+    /// # Errors
+    /// Returns an error if Telegram rejects the send for any reason other than
+    /// rate limiting (which the adaptor retries automatically).
+    pub async fn send_document_reply(
+        &self,
+        chat_id: ChatId,
+        reply_to: MessageId,
+        document: InputFile,
+        caption: String,
+    ) -> ResponseResult<Message> {
+        self.bot
+            .send_document(chat_id, document)
+            .caption(caption)
+            .reply_parameters(ReplyParameters::new(reply_to))
+            .await
     }
 
     pub(super) async fn run_edit_operation<T, Op, Fut>(
