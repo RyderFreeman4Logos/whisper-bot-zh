@@ -16,7 +16,7 @@ name = "whisper_bot_zh"
 path = "src/lib.rs"
 
 [dependencies]
-teloxide = { version = "0.13", default-features = false, features = ["macros", "ctrlc_handler", "rustls"] }
+teloxide = { version = "0.13", default-features = false, features = ["macros", "ctrlc_handler", "rustls", "throttle"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "process", "io-util", "fs", "sync"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "stream", "rustls-tls"] }
 telegram_reqwest = { package = "reqwest", version = "0.11", default-features = false, features = ["json", "multipart", "stream", "rustls-tls"] }

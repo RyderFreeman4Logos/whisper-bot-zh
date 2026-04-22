@@ -3,14 +3,22 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use teloxide::adaptors::throttle::{Limits, Throttle};
 use teloxide::dispatching::UpdateFilterExt;
 use teloxide::prelude::*;
+use teloxide::requests::RequesterExt;
 use tokio::sync::Semaphore;
 
 use crate::asr::AsrService;
 use crate::auth::AuthService;
 use crate::config::Settings;
 use crate::llm::LlmService;
+
+/// Bot adaptor stack: a [`Throttle`]-wrapped [`Bot`] that enforces Telegram's
+/// documented per-chat / global send rate limits and auto-retries `RetryAfter`
+/// for `send_*` calls. `edit_*` calls pass through unchanged and are still
+/// paced by [`render::TelegramGovernor`].
+pub type ThrottledBot = Throttle<Bot>;
 
 pub mod commands;
 pub mod flow;
@@ -37,7 +45,9 @@ struct DispatchDeps {
 /// profile lookup fails before the dispatcher starts.
 pub async fn run(settings: Settings) -> Result<()> {
     let settings = Arc::new(settings);
-    let bot = Bot::with_client(settings.bot_token.clone(), settings.telegram_client()?);
+    let bot: ThrottledBot =
+        Bot::with_client(settings.bot_token.clone(), settings.telegram_client()?)
+            .throttle(Limits::default());
     let bot_username = Arc::new(
         bot.get_me()
             .await
@@ -75,7 +85,7 @@ pub async fn run(settings: Settings) -> Result<()> {
 }
 
 async fn dispatch_message(
-    bot: Bot,
+    bot: ThrottledBot,
     message: Message,
     deps: Arc<DispatchDeps>,
     bot_username: Arc<String>,
