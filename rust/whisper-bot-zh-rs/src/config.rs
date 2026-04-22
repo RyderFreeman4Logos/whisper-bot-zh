@@ -117,7 +117,7 @@ impl Settings {
             llm_heartbeat_interval_sec: optional_parsed("LLM_HEARTBEAT_INTERVAL_SEC")?
                 .unwrap_or(20.0),
             telegram_edit_min_interval_ms: optional_parsed("TELEGRAM_EDIT_MIN_INTERVAL_MS")?
-                .unwrap_or(500),
+                .unwrap_or(100),
             groq_api: optional("GROQ_API").or_else(|| optional("GROQ_API_KEY")),
             gemini_api: optional("GEMINI_API"),
             anthropic_api_key: optional("ANTHROPIC_API_KEY").or_else(|| optional("ANTHROPIC_API")),

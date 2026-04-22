@@ -9,6 +9,8 @@ use teloxide::{ApiError, RequestError};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tokio::time::Instant;
 
+use super::super::ThrottledBot;
+
 struct EditState {
     next_allowed_at: Option<Instant>,
 }
@@ -31,7 +33,7 @@ impl EditState {
 
 #[derive(Clone)]
 pub struct TelegramGovernor {
-    bot: Bot,
+    bot: ThrottledBot,
     edit_states: Arc<Mutex<HashMap<ChatId, Arc<AsyncMutex<EditState>>>>>,
     min_interval: Duration,
     max_retries: usize,
@@ -39,7 +41,7 @@ pub struct TelegramGovernor {
 
 impl TelegramGovernor {
     #[must_use]
-    pub fn new(bot: Bot, min_interval: Duration) -> Self {
+    pub fn new(bot: ThrottledBot, min_interval: Duration) -> Self {
         Self {
             bot,
             edit_states: Arc::new(Mutex::new(HashMap::new())),
@@ -100,87 +102,57 @@ impl TelegramGovernor {
         }
     }
 
-    /// Send a document to a Telegram chat with retry handling for write limits.
+    /// Send a document to a Telegram chat.
+    ///
+    /// Rate limiting and `RetryAfter` retries are handled by the underlying
+    /// [`Throttle`](teloxide::adaptors::throttle::Throttle) adaptor.
     ///
     /// # Errors
-    /// Returns an error if Telegram rejects the send operation, or if retries
-    /// are exhausted after `RetryAfter`.
+    /// Returns an error if Telegram rejects the send for any reason other than
+    /// rate limiting (which the adaptor retries automatically).
     pub async fn send_document(
         &self,
         chat_id: ChatId,
         document: InputFile,
         caption: String,
     ) -> ResponseResult<Message> {
-        self.run_serialized_chat_operation(chat_id, || {
-            let bot = self.bot.clone();
-            let document = document.clone();
-            let caption = caption.clone();
-            async move { bot.send_document(chat_id, document).caption(caption).await }
-        })
-        .await
+        self.bot
+            .send_document(chat_id, document)
+            .caption(caption)
+            .await
     }
 
-    /// Send a text message to a Telegram chat with retry handling for write limits.
+    /// Send a text message to a Telegram chat.
+    ///
+    /// Rate limiting and `RetryAfter` retries are handled by the underlying
+    /// [`Throttle`](teloxide::adaptors::throttle::Throttle) adaptor.
     ///
     /// # Errors
-    /// Returns an error if Telegram rejects the send operation, or if retries
-    /// are exhausted after `RetryAfter`.
+    /// Returns an error if Telegram rejects the send for any reason other than
+    /// rate limiting (which the adaptor retries automatically).
     pub async fn send_message(
         &self,
         chat_id: ChatId,
         text: impl Into<String>,
     ) -> ResponseResult<Message> {
-        let text = text.into();
-        self.run_serialized_chat_operation(chat_id, || {
-            let bot = self.bot.clone();
-            let text = text.clone();
-            async move { bot.send_message(chat_id, text).await }
-        })
-        .await
-    }
-
-    pub(super) async fn run_serialized_chat_operation<T, Op, Fut>(
-        &self,
-        chat_id: ChatId,
-        operation: Op,
-    ) -> ResponseResult<T>
-    where
-        Op: FnMut() -> Fut,
-        Fut: Future<Output = ResponseResult<T>>,
-    {
-        let edit_state_guard = self.wait_for_edit_slot(chat_id).await;
-        self.run_write_operation_with_edit_state(operation, Some(edit_state_guard))
-            .await
+        self.bot.send_message(chat_id, text).await
     }
 
     pub(super) async fn run_edit_operation<T, Op, Fut>(
         &self,
         chat_id: ChatId,
-        operation: Op,
-    ) -> ResponseResult<T>
-    where
-        Op: FnMut() -> Fut,
-        Fut: Future<Output = ResponseResult<T>>,
-    {
-        self.run_serialized_chat_operation(chat_id, operation).await
-    }
-
-    async fn run_write_operation_with_edit_state<T, Op, Fut>(
-        &self,
         mut operation: Op,
-        mut edit_state_guard: Option<OwnedMutexGuard<EditState>>,
     ) -> ResponseResult<T>
     where
         Op: FnMut() -> Fut,
         Fut: Future<Output = ResponseResult<T>>,
     {
+        let mut edit_state_guard = self.wait_for_edit_slot(chat_id).await;
         let mut retries = 0;
         loop {
             match operation().await {
                 Err(RequestError::RetryAfter(delay)) => {
-                    if let Some(state) = edit_state_guard.as_mut() {
-                        Self::record_retry_after(state, delay.duration());
-                    }
+                    Self::record_retry_after(&mut edit_state_guard, delay.duration());
 
                     if retries >= self.max_retries {
                         return Err(RequestError::RetryAfter(delay));
@@ -190,9 +162,7 @@ impl TelegramGovernor {
                     tokio::time::sleep(delay.duration()).await;
                 }
                 Ok(value) => {
-                    if let Some(state) = edit_state_guard.as_mut() {
-                        self.record_edit(state);
-                    }
+                    self.record_edit(&mut edit_state_guard);
                     return Ok(value);
                 }
                 Err(error) => return Err(error),

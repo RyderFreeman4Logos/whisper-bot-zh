@@ -12,7 +12,7 @@ use crate::audio;
 use crate::llm::LlmService;
 
 use super::super::render::TelegramGovernor;
-use super::super::{flow, render};
+use super::super::{flow, render, ThrottledBot};
 
 const FFMPEG_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -22,7 +22,7 @@ const FFMPEG_TIMEOUT: Duration = Duration::from_secs(60);
 /// Returns an error only if Telegram rejects the final user-visible recovery
 /// reply after an internal processing failure.
 pub async fn handle_audio(
-    bot: &Bot,
+    bot: &ThrottledBot,
     governor: &TelegramGovernor,
     message: &Message,
     asr: &AsrService,
@@ -51,7 +51,7 @@ pub async fn handle_audio(
 }
 
 async fn handle_audio_inner(
-    bot: &Bot,
+    bot: &ThrottledBot,
     governor: &TelegramGovernor,
     message: &Message,
     asr: &AsrService,
@@ -154,7 +154,7 @@ async fn handle_audio_inner(
     Ok(())
 }
 
-async fn download_audio(bot: &Bot, path: &str) -> Result<Bytes> {
+async fn download_audio(bot: &ThrottledBot, path: &str) -> Result<Bytes> {
     let chunks = bot
         .download_file_stream(path)
         .try_collect::<Vec<_>>()
