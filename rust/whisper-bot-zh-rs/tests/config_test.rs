@@ -176,3 +176,36 @@ fn cli_data_dir_wins_when_finding_env_file() {
     assert_eq!(settings.access_password, "cli-password");
     assert_eq!(settings.data_dir, cli_data_dir);
 }
+
+#[test]
+fn reasoning_effort_allows_extended_passthrough_values() {
+    let _env = EnvGuard::set(&[
+        ("HOME", None),
+        ("BOT_TOKEN", None),
+        ("ACCESS_PASSWORD", None),
+        ("DATA_DIR", None),
+        ("CACHE_DIR", None),
+    ]);
+    let temp_dir = tempdir().expect("temp dir");
+    let data_dir = temp_dir.path().join("env-data");
+    let cache_dir = temp_dir.path().join("env-cache");
+
+    for (raw, expected) in [("minimal", "minimal"), (" XHIGH ", "xhigh")] {
+        let env_file = temp_dir.path().join(format!("{expected}.env"));
+        fs::write(
+            &env_file,
+            format!(
+                "BOT_TOKEN=x\nACCESS_PASSWORD=y\nDATA_DIR={}\nCACHE_DIR={}\nLLM_LOCAL_REASONING_EFFORT={raw}\n",
+                data_dir.display(),
+                cache_dir.display()
+            ),
+        )
+        .expect("write env file");
+
+        let settings = Settings::load(Some(&env_file), None).expect("load settings");
+        assert_eq!(
+            settings.llm_local_reasoning_effort.as_deref(),
+            Some(expected)
+        );
+    }
+}

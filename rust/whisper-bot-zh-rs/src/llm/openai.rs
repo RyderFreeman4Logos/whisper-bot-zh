@@ -19,6 +19,7 @@ pub struct ChatRefiner {
     temperature: f32,
     top_p: Option<f32>,
     max_tokens: Option<u32>,
+    reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -30,6 +31,8 @@ struct ChatRequest<'a> {
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -67,6 +70,7 @@ impl ChatRefiner {
         temperature: f32,
         top_p: Option<f32>,
         max_tokens: Option<u32>,
+        reasoning_effort: Option<String>,
     ) -> Self {
         Self {
             client,
@@ -79,6 +83,7 @@ impl ChatRefiner {
             temperature,
             top_p,
             max_tokens,
+            reasoning_effort,
         }
     }
 
@@ -87,6 +92,11 @@ impl ChatRefiner {
         &self.model
     }
 
+    /// Refine a transcript by calling the configured chat-completions endpoint.
+    ///
+    /// # Errors
+    /// Returns an error if the request times out, the HTTP call fails, the
+    /// response body is invalid, or the model returns an empty/non-success result.
     pub async fn refine(&self, transcript: &str) -> Result<RefinementResult> {
         let started = Instant::now();
         let request = self.request(transcript);
@@ -132,6 +142,7 @@ impl ChatRefiner {
             temperature: self.temperature,
             top_p: self.top_p,
             max_tokens: self.max_tokens,
+            reasoning_effort: self.reasoning_effort.as_deref(),
         };
 
         let response = self
@@ -156,3 +167,7 @@ impl ChatRefiner {
         Ok(body)
     }
 }
+
+#[cfg(test)]
+#[path = "openai_test.rs"]
+mod tests;

@@ -9,6 +9,11 @@ use bytes::Bytes;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
+/// Transcode a Telegram audio buffer into 16kHz mono WAV bytes.
+///
+/// # Errors
+/// Returns an error if `ffmpeg` cannot be spawned, stdin/stdout handling fails,
+/// transcoding exceeds `timeout`, or `ffmpeg` exits unsuccessfully.
 pub async fn transcode_to_wav(input: Bytes, timeout: Duration) -> Result<Bytes> {
     let mut child = Command::new("ffmpeg");
     child

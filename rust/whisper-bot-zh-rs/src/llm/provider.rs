@@ -150,6 +150,7 @@ mod tests {
             settings.llm_temperature,
             settings.llm_top_p,
             settings.llm_max_tokens,
+            None,
         );
 
         let result = refiner.refine("原始文本").await?;

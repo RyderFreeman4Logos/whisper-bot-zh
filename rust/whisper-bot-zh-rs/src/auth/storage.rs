@@ -18,6 +18,10 @@ pub struct AuthService {
 }
 
 impl AuthService {
+    /// Build the authentication service from application settings.
+    ///
+    /// # Errors
+    /// Returns an error if the configured allowlist cannot be loaded from disk.
     pub async fn new(settings: &Settings) -> Result<Self> {
         Self::from_parts(
             settings.allowed_users_file(),
@@ -26,6 +30,10 @@ impl AuthService {
         .await
     }
 
+    /// Build the authentication service from an explicit storage path and password.
+    ///
+    /// # Errors
+    /// Returns an error if the allowlist file cannot be loaded or recovered.
     pub async fn from_parts(storage_path: PathBuf, password: String) -> Result<Self> {
         let allowed_users = load_users(&storage_path).await?;
         Ok(Self {
@@ -36,6 +44,11 @@ impl AuthService {
         })
     }
 
+    /// Authenticate a user and persist the updated allowlist on success.
+    ///
+    /// # Errors
+    /// Returns an error if the allowlist cannot be written back to disk after a
+    /// successful password check.
     pub async fn authenticate_user(&self, user_id: u64, password: &str) -> Result<bool> {
         if password != self.password.as_str() {
             tracing::warn!(user_id, "authentication failed");

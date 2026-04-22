@@ -11,7 +11,7 @@ use crate::config::Settings;
 #[derive(Clone)]
 pub struct AsrService {
     client: reqwest::Client,
-    semaphore: Arc<Semaphore>,
+    limiter: Arc<Semaphore>,
     endpoint: String,
     api_key: String,
     model: String,
@@ -26,6 +26,11 @@ struct TranscriptResponse {
 }
 
 impl AsrService {
+    /// Build the ASR service from application settings.
+    ///
+    /// # Errors
+    /// Returns an error if no ASR API key is configured or the outbound HTTP
+    /// client cannot be constructed from the current settings.
     pub fn new(settings: &Settings) -> Result<Self> {
         let api_key = settings
             .asr_effective_api_key()
@@ -40,7 +45,7 @@ impl AsrService {
             &settings.asr_language,
             &settings.asr_prompt,
             settings.asr_temperature,
-            settings.max_concurrent_tasks,
+            settings.asr_max_concurrent,
         ))
     }
 
@@ -58,7 +63,7 @@ impl AsrService {
     ) -> Self {
         Self {
             client,
-            semaphore: Arc::new(Semaphore::new(max_concurrent.max(1))),
+            limiter: Arc::new(Semaphore::new(max_concurrent.max(1))),
             endpoint: format!("{}/audio/transcriptions", base_url.trim_end_matches('/')),
             api_key,
             model: model.to_owned(),
@@ -73,10 +78,17 @@ impl AsrService {
         &self.model
     }
 
+    /// Submit WAV audio to the configured ASR backend and return the transcript.
+    ///
+    /// # Errors
+    /// Returns an error if the concurrency limiter is closed, the request fails,
+    /// the backend returns a non-success status, or the response body cannot be
+    /// parsed as a transcript payload.
     pub async fn transcribe(&self, audio: Bytes) -> Result<String> {
         let _permit = self
-            .semaphore
-            .acquire()
+            .limiter
+            .clone()
+            .acquire_owned()
             .await
             .context("ASR semaphore closed unexpectedly")?;
 

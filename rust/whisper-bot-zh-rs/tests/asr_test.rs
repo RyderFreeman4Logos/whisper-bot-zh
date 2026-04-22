@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use std::fs;
 
 use bytes::Bytes;
@@ -80,4 +82,35 @@ fn accepts_openai_api_key_when_groq_keys_are_absent() {
 
     assert_eq!(settings.asr_effective_api_key(), Some("openai-secret"));
     assert_eq!(service.model(), "whisper-large-v3");
+}
+
+#[tokio::test]
+async fn asr_semaphore_caps_concurrent_uploads() {
+    let server = MockServer::start().await;
+    let response = ResponseTemplate::new(200)
+        .set_delay(Duration::from_millis(200))
+        .set_body_raw(r#"{"text":"你好，世界"}"#, "application/json");
+
+    Mock::given(method("POST"))
+        .and(path("/audio/transcriptions"))
+        .respond_with(response)
+        .mount(&server)
+        .await;
+
+    let service = AsrService::from_parts(
+        reqwest::Client::new(),
+        &server.uri(),
+        "secret-token".to_owned(),
+        "whisper-large-v3",
+        "zh",
+        "以下是一段简体中文内容:",
+        0.0,
+        2,
+    );
+    let started = Instant::now();
+    let tasks = (0..5).map(|_| service.transcribe(Bytes::from_static(b"fake-audio")));
+    let results = futures::future::join_all(tasks).await;
+
+    assert!(results.into_iter().all(|result| result.is_ok()));
+    assert!(started.elapsed() >= Duration::from_millis(580));
 }

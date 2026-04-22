@@ -32,6 +32,11 @@ pub struct LlmService {
 }
 
 impl LlmService {
+    /// Build the LLM service from application settings.
+    ///
+    /// # Errors
+    /// Returns an error if the configured cloud or local refiners cannot be
+    /// constructed.
     pub fn new(settings: &Settings) -> Result<Self> {
         Ok(Self::from_refiners(
             CloudRefiner::from_settings(settings)?,
@@ -59,6 +64,21 @@ impl LlmService {
         self.has_cloud() || self.has_local()
     }
 
+    #[must_use]
+    pub fn cloud_display_model(&self) -> Option<String> {
+        self.cloud.as_ref().map(CloudRefiner::display_model)
+    }
+
+    #[must_use]
+    pub fn local_display_model(&self) -> Option<String> {
+        self.local.as_ref().map(|l| l.model_name().to_owned())
+    }
+
+    /// Refine text with the cloud model chain.
+    ///
+    /// # Errors
+    /// Returns an error if no cloud refiner is configured or if cloud refinement
+    /// fails.
     pub async fn refine_cloud(&self, text: &str) -> Result<RefinementResult> {
         let cloud = self
             .cloud
@@ -67,6 +87,11 @@ impl LlmService {
         cloud.refine(text).await
     }
 
+    /// Refine text with the local model endpoint.
+    ///
+    /// # Errors
+    /// Returns an error if no local refiner is configured or if local refinement
+    /// fails.
     pub async fn refine_local(&self, text: &str) -> Result<RefinementResult> {
         let local = self
             .local
@@ -75,6 +100,11 @@ impl LlmService {
         local.refine(text).await
     }
 
+    /// Refine text with whichever single refiner is currently available.
+    ///
+    /// # Errors
+    /// Returns an error if no refiner is configured or if the selected refiner
+    /// fails.
     pub async fn refine_single(&self, text: &str) -> Result<RefinementResult> {
         if self.has_cloud() {
             return self.refine_cloud(text).await;
@@ -85,6 +115,11 @@ impl LlmService {
         bail!("LLM refinement requested but service is disabled");
     }
 
+    /// Refine text with both cloud and local refiners in parallel.
+    ///
+    /// # Errors
+    /// Returns an error if either refiner is missing or if either parallel
+    /// refinement request fails.
     pub async fn refine_dual(&self, text: &str) -> Result<Vec<RefinementResult>> {
         let cloud = self
             .cloud
