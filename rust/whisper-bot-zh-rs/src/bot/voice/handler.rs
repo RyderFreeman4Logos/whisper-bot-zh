@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -5,6 +6,7 @@ use bytes::Bytes;
 use futures::TryStreamExt;
 use teloxide::net::Download;
 use teloxide::prelude::*;
+use teloxide::types::MessageId;
 use tokio::sync::OwnedSemaphorePermit;
 
 use crate::asr::AsrService;
@@ -23,10 +25,10 @@ const FFMPEG_TIMEOUT: Duration = Duration::from_secs(60);
 /// reply after an internal processing failure.
 pub async fn handle_audio(
     bot: &ThrottledBot,
-    governor: &TelegramGovernor,
+    governor: &Arc<TelegramGovernor>,
     message: &Message,
     asr: &AsrService,
-    llm: &LlmService,
+    llm: &Arc<LlmService>,
     voice_permit: OwnedSemaphorePermit,
 ) -> ResponseResult<()> {
     if let Err(error) = Box::pin(handle_audio_inner(
@@ -56,11 +58,11 @@ pub async fn handle_audio(
 
 async fn handle_audio_inner(
     bot: &ThrottledBot,
-    governor: &TelegramGovernor,
+    governor: &Arc<TelegramGovernor>,
     message: &Message,
     asr: &AsrService,
-    llm: &LlmService,
-    _voice_permit: OwnedSemaphorePermit,
+    llm: &Arc<LlmService>,
+    voice_permit: OwnedSemaphorePermit,
 ) -> Result<()> {
     let file_id = if let Some(voice) = message.voice() {
         voice.file.id.clone()
@@ -119,8 +121,40 @@ async fn handle_audio_inner(
         .await
         .context("failed to send refinement status")?;
 
+    // Fast path is done — release the voice slot so the next voice can start
+    // its ASR immediately. The LLM refinement runs detached below; cloud /
+    // local each enforce their own concurrency via per-refiner semaphores.
+    drop(voice_permit);
+
+    let governor_owned = Arc::clone(governor);
+    let llm_owned = Arc::clone(llm);
+    let voice_message_id = message.id;
+    tokio::spawn(async move {
+        if let Err(error) = run_refinement(
+            governor_owned,
+            refinement_message,
+            llm_owned,
+            transcript,
+            voice_message_id,
+        )
+        .await
+        {
+            tracing::error!(%error, "refinement task failed");
+        }
+    });
+
+    Ok(())
+}
+
+async fn run_refinement(
+    governor: Arc<TelegramGovernor>,
+    refinement_message: Message,
+    llm: Arc<LlmService>,
+    transcript: String,
+    voice_message_id: MessageId,
+) -> Result<()> {
     if llm.has_cloud() && llm.has_local() {
-        let mut updates = flow::dual::collect(llm.clone(), transcript.clone());
+        let mut updates = flow::dual::collect((*llm).clone(), transcript);
         let mut deferred_long_file_notice_sent = false;
         while let Some(snapshot) = updates.recv().await {
             let snapshot = snapshot?;
@@ -130,7 +164,7 @@ async fn handle_audio_inner(
             if should_defer_dual_file_delivery(&snapshot, &reply) {
                 if !deferred_long_file_notice_sent {
                     render::update_status(
-                        governor,
+                        &governor,
                         &refinement_message,
                         "📝 文本较长，等待双模型完成后发送最终文件...",
                     )
@@ -141,16 +175,16 @@ async fn handle_audio_inner(
                 continue;
             }
 
-            render::deliver(governor, &refinement_message, message.id, reply)
+            render::deliver(&governor, &refinement_message, voice_message_id, reply)
                 .await
                 .context("failed to deliver dual refinement progress")?;
         }
     } else {
-        let result = flow::single::collect(llm, &transcript).await?;
+        let result = flow::single::collect(&llm, &transcript).await?;
         render::deliver(
-            governor,
+            &governor,
             &refinement_message,
-            message.id,
+            voice_message_id,
             render::single_refinement_reply(&result),
         )
         .await
