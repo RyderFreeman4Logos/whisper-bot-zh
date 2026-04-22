@@ -1,14 +1,13 @@
 //! teloxide entrypoint + dispatcher wiring.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use teloxide::adaptors::throttle::{Limits, Throttle};
 use teloxide::dispatching::UpdateFilterExt;
 use teloxide::prelude::*;
 use teloxide::requests::RequesterExt;
-use tokio::sync::{oneshot, Semaphore};
+use tokio::sync::Semaphore;
 
 use crate::asr::AsrService;
 use crate::auth::AuthService;
@@ -36,13 +35,11 @@ struct DispatchDeps {
     auth: Arc<AuthService>,
     governor: Arc<render::TelegramGovernor>,
     llm: Arc<LlmService>,
+    /// Caps how many voices can be in the fast (download + ffmpeg + ASR +
+    /// transcript-edit) phase at once. The slow LLM-refinement phase runs in a
+    /// detached task without holding this permit, so the slot frees up the
+    /// instant the transcript is delivered.
     voice_limiter: Arc<Semaphore>,
-    /// Per-chat completion oneshot chain. Each new voice in a chat takes the
-    /// previous task's `Receiver` (paired with that task's "done" `Sender`) and
-    /// inserts its own. Awaiting the prior `Receiver` enforces FIFO processing
-    /// per chat while still letting different chats run in parallel up to
-    /// `voice_limiter`'s capacity.
-    chat_chain: Arc<StdMutex<HashMap<ChatId, oneshot::Receiver<()>>>>,
 }
 
 /// Start the Telegram bot dispatcher and serve updates until shutdown.
@@ -71,14 +68,12 @@ pub async fn run(settings: Settings) -> Result<()> {
         settings.telegram_edit_min_interval(),
     ));
     let voice_limiter = Arc::new(Semaphore::new(settings.max_concurrent_tasks));
-    let chat_chain = Arc::new(StdMutex::new(HashMap::new()));
     let deps = Arc::new(DispatchDeps {
         asr,
         auth,
         governor,
         llm,
         voice_limiter,
-        chat_chain,
     });
 
     let handler = Update::filter_message().endpoint(dispatch_message);
@@ -134,49 +129,32 @@ async fn dispatch_message(
             return Ok(());
         }
 
-        // Reserve this voice's slot in the per-chat FIFO queue synchronously,
-        // so arrival order at the dispatcher (which is itself serial) is the
-        // order voices get processed for any given chat. Different chats can
-        // still progress in parallel up to `voice_limiter`'s capacity.
-        let (prev_done_rx, my_done_tx) = {
-            let mut chain = deps.chat_chain.lock().expect("chat chain lock poisoned");
-            let (my_done_tx, my_done_rx) = oneshot::channel::<()>();
-            let prev = chain.insert(message.chat.id, my_done_rx);
-            (prev, my_done_tx)
-        };
-
         // Detach the voice handler so the dispatcher can keep receiving
         // subsequent messages while a slow local LLM is still refining.
         // Permit acquisition happens INSIDE the spawned task so that excess
         // voices queue up (waiting on the semaphore) instead of being rejected.
+        // Same-chat voices run in parallel; ordering is best-effort by arrival
+        // time at the dispatcher and may interleave when local LLM is slow.
         tokio::spawn(async move {
-            // Wait for the previous voice in this chat to finish (FIFO order).
-            // A dropped predecessor (panic/abort) yields Err which we ignore so
-            // the chain self-heals instead of permanently stalling the chat.
-            if let Some(rx) = prev_done_rx {
-                let _ = rx.await;
-            }
             let voice_permit = match deps.voice_limiter.clone().acquire_owned().await {
                 Ok(permit) => permit,
                 Err(error) => {
                     tracing::error!(%error, "voice handler semaphore closed");
-                    let _ = my_done_tx.send(());
                     return;
                 }
             };
             if let Err(error) = voice::handle_audio(
                 &bot,
-                deps.governor.as_ref(),
+                &deps.governor,
                 &message,
                 deps.asr.as_ref(),
-                deps.llm.as_ref(),
+                &deps.llm,
                 voice_permit,
             )
             .await
             {
                 tracing::error!(%error, "voice handler task failed");
             }
-            let _ = my_done_tx.send(());
         });
         return Ok(());
     }
